@@ -1,6 +1,20 @@
-# Bayrol Pool Controller Integration for Home Assistant
+<img src="icon.png" alt="Bayrol Cloud" width="128" height="128">
 
-This is a Home Assistant Custom Component for Bayrol Pool Controllers (Pool Relax). It allows you to monitor your pool's pH, Redox (ORP), and temperature values directly in Home Assistant.
+# Bayrol Cloud Integration for Home Assistant
+
+⚠️ **BETA STATUS**: This integration is currently in beta. Please report any issues you encounter.
+
+This is a Home Assistant Custom Component for Bayrol Cloud. It currently allows you to monitor your pool's pH, Redox (ORP), and temperature values directly in Home Assistant.
+
+## Tested Devices
+
+Currently tested with:
+- BAYROL PoolRelax 3
+
+Have a different Bayrol device? Please [open an issue](https://github.com/razem-io/ha-bayrol-cloud/issues) to help expand device support! When opening an issue, please include:
+- Your device model
+- HTML response of https://www.bayrol-poolaccess.de/webview/getdata.php?cid=<your-cid>
+- Any specific features or parameters your device supports
 
 ## Features
 
@@ -23,7 +37,7 @@ This is a Home Assistant Custom Component for Bayrol Pool Controllers (Pool Rela
    - Click on "Integrations"
    - Click the three dots in the top right corner
    - Select "Custom repositories"
-   - Add `https://github.com/razem-io/ha-bayrol` as the repository URL
+   - Add `https://github.com/razem-io/ha-bayrol-cloud` as the repository URL
    - Select "Integration" as the category
 3. Click "Install"
 4. Restart Home Assistant
@@ -37,7 +51,7 @@ This is a Home Assistant Custom Component for Bayrol Pool Controllers (Pool Rela
 
 1. Go to Settings -> Devices & Services
 2. Click "Add Integration"
-3. Search for "Bayrol Pool Controller"
+3. Search for "Bayrol Cloud"
 4. Enter your credentials:
    - Username (Email address used for Bayrol Pool Access)
    - Password
@@ -48,9 +62,9 @@ The integration will automatically discover and add all pool controllers configu
 
 For each controller (where `CID` is your Controller ID), the integration provides:
 
-- `sensor.bayrol_CID_ph`: Current pH level
-- `sensor.bayrol_CID_redox`: Current Redox/ORP value in mV
-- `sensor.bayrol_CID_temperature`: Current water temperature in °C
+- `sensor.bayrol_cloud_CID_ph`: Current pH level
+- `sensor.bayrol_cloud_CID_redox`: Current Redox/ORP value in mV
+- `sensor.bayrol_cloud_CID_temperature`: Current water temperature in °C
 
 Each controller will appear as a separate device in Home Assistant with its own set of sensors.
 
@@ -113,7 +127,7 @@ If you encounter any issues:
 
 ## Support
 
-For bugs or feature requests, please [open an issue](https://github.com/razem-io/ha-bayrol/issues) on GitHub.
+For bugs, feature requests, or to add support for new devices, please [open an issue](https://github.com/razem-io/ha-bayrol-cloud/issues) on GitHub.
 
 ## License
 

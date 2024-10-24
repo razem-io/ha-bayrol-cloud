@@ -11,7 +11,7 @@ from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.const import CONF_USERNAME, CONF_PASSWORD
 
 from . import DOMAIN, CONF_CID
@@ -29,11 +29,30 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
 async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
     """Validate the user input allows us to connect."""
 
-    session = async_get_clientsession(hass)
-    api = BayrolPoolAPI(session)
+    # Create a new session specifically for validation
+    session = async_create_clientsession(hass)
+    api = BayrolPoolAPI(
+        session=session,
+        username=data[CONF_USERNAME],
+        password=data[CONF_PASSWORD],
+    )
 
     try:
-        if not await api.login(data[CONF_USERNAME], data[CONF_PASSWORD]):
+        # Attempt login with retries
+        login_success = False
+        for _ in range(3):  # Try up to 3 times
+            try:
+                if await api.login():
+                    login_success = True
+                    break
+            except Exception as err:
+                _LOGGER.debug("Login attempt failed: %s", err)
+                await session.close()  # Close the session before retrying
+                session = async_create_clientsession(hass)  # Create a new session
+                api = BayrolPoolAPI(session=session, username=data[CONF_USERNAME], password=data[CONF_PASSWORD])
+
+        if not login_success:
+            _LOGGER.error("Failed to login after multiple attempts")
             raise InvalidAuth
 
         # Get list of controllers
@@ -55,6 +74,8 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
     except Exception as err:
         _LOGGER.error("Unexpected error: %s", err, exc_info=True)
         raise CannotConnect
+    finally:
+        await session.close()  # Always close the validation session
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Bayrol Pool Controller."""

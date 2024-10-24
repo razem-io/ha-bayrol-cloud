@@ -2,8 +2,8 @@
     "config": {
         "step": {
             "user": {
-                "title": "Connect to Bayrol Pool Access",
-                "description": "Please enter your Bayrol Pool Access credentials. All your configured controllers will be added automatically.",
+                "title": "Connect to Bayrol Cloud",
+                "description": "Please enter your Bayrol Cloud credentials. All your configured controllers will be added automatically.",
                 "data": {
                     "username": "Username (Email)",
                     "password": "Password"

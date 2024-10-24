@@ -27,7 +27,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Bayrol Pool sensor based on a config entry."""
-    coordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
     cid = entry.data[CONF_CID]
     device_name = entry.data.get("device_name", "Pool Controller")
 
@@ -36,7 +36,7 @@ async def async_setup_entry(
             coordinator,
             entry,
             "pH",
-            f"bayrol_{cid}_ph",
+            f"bayrol_cloud_{cid}_ph",
             "pH",
             None,
             "pH",
@@ -47,7 +47,7 @@ async def async_setup_entry(
             coordinator,
             entry,
             "mV",
-            f"bayrol_{cid}_redox",
+            f"bayrol_cloud_{cid}_redox",
             "Redox",
             "mV",
             "mdi:flash",
@@ -58,7 +58,7 @@ async def async_setup_entry(
             coordinator,
             entry,
             "T",
-            f"bayrol_{cid}_temperature",
+            f"bayrol_cloud_{cid}_temperature",
             "Temperature",
             UnitOfTemperature.CELSIUS,
             "mdi:thermometer",
@@ -90,7 +90,7 @@ class BayrolPoolSensor(CoordinatorEntity, SensorEntity):
         self.entity_id = f"sensor.{entity_id}"
         device_name = entry.data.get("device_name", "Pool Controller")
         self._attr_name = f"{device_name} {name}"
-        self._attr_unique_id = f"bayrol_{entry.data[CONF_CID]}_{key}"
+        self._attr_unique_id = f"bayrol_cloud_{entry.data[CONF_CID]}_{key}"
         self._attr_native_unit_of_measurement = unit
         self._attr_icon = icon
         self._attr_state_class = state_class
@@ -98,7 +98,7 @@ class BayrolPoolSensor(CoordinatorEntity, SensorEntity):
 
         # Device info
         self._attr_device_info = {
-            "identifiers": {(DOMAIN, f"bayrol_{entry.data[CONF_CID]}")},
+            "identifiers": {(DOMAIN, f"bayrol_cloud_{entry.data[CONF_CID]}")},
             "name": f"{device_name} ({entry.data[CONF_CID]})",
             "manufacturer": "Bayrol",
             "model": device_name,

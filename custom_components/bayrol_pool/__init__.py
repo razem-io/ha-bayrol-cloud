@@ -61,16 +61,31 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         password=entry.data[CONF_PASSWORD],
     )
 
+    # Initial login to establish session
+    try:
+        if not await api.login():
+            _LOGGER.error("Failed to perform initial login")
+            return False
+    except Exception as err:
+        _LOGGER.error("Error during initial login: %s", err)
+        return False
+
     async def async_update_data():
         """Fetch data from API."""
         try:
             async with async_timeout.timeout(30):
-                if not await api.login():
-                    raise UpdateFailed("Failed to login to Bayrol Pool Access")
+                # Only attempt login if we don't have a valid session
+                if not api._phpsessid:
+                    if not await api.login():
+                        raise UpdateFailed("Failed to login to Bayrol Pool Access")
                 
                 data = await api.get_data(entry.data[CONF_CID])
                 if not data:
-                    raise UpdateFailed("Failed to get data from Bayrol Pool Access")
+                    # If data fetch fails, try logging in again and retry once
+                    if await api.login():
+                        data = await api.get_data(entry.data[CONF_CID])
+                    if not data:
+                        raise UpdateFailed("Failed to get data from Bayrol Pool Access")
                 
                 return data
         except Exception as err:
@@ -86,7 +101,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await coordinator.async_config_entry_first_refresh()
 
-    hass.data[DOMAIN][entry.entry_id] = coordinator
+    hass.data[DOMAIN][entry.entry_id] = {
+        "coordinator": coordinator,
+        "api": api,  # Store API instance to maintain session
+    }
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
