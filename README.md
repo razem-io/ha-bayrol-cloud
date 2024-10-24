@@ -58,7 +58,7 @@ Have a different Bayrol device? Please [open an issue](https://github.com/razem-
    - Username (Email address used for Bayrol Pool Access)
    - Password
 
-The integration will automatically discover and add all pool controllers configured in your Bayrol Pool Access account.
+The integration will automatically discover and add all pool controllers configured in your Bayrol Cloud account.
 
 ## Sensors
 
@@ -114,7 +114,7 @@ python test_api.py --username your@email.com --password yourpassword --cid yourc
 ```
 
 This will test:
-- Authentication with Bayrol Pool Access
+- Authentication with Bayrol Cloud Access
 - Data fetching for your pool controller
 - Parsing of sensor values
 
@@ -123,7 +123,7 @@ This will test:
 If you encounter any issues:
 
 1. Check that your credentials are correct
-2. Ensure your Bayrol Pool Access account is active and working
+2. Ensure your Bayrol Cloud Access account is active and working
 3. Check the Home Assistant logs for any error messages
 4. Try running the test script to verify API connectivity
 
