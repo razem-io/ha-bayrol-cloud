@@ -92,14 +92,14 @@ The script can be run in several ways:
 
 2. Specifying custom user and host:
    ```bash
-   ./dev-install.sh -u admin -s 192.168.1.100
+   ./dev-install.sh -u admin -h 192.168.1.100
    ```
 
 3. View help and available options:
    ```bash
    ./dev-install.sh --help
    ```
-
+   
 The script will:
 - Sync the integration files to your Home Assistant instance
 - Restart Home Assistant to apply changes

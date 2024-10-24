@@ -17,11 +17,11 @@ show_usage() {
     echo ""
     echo "Options:"
     echo "   -u, --user    Remote user (default: root)"
-    echo "   -s, --host    Remote host (default: homeassistant.local)"
+    echo "   -h, --host    Remote host (default: homeassistant.local)"
     echo "   --help        Show this help message"
     echo ""
     echo "Example:"
-    echo "   ./dev-install.sh -u admin -s 192.168.1.100"
+    echo "   ./dev-install.sh -u admin -h 192.168.1.100"
     echo ""
     echo "Note: Make sure the script is executable (chmod +x dev-install.sh)"
 }
@@ -30,7 +30,7 @@ show_usage() {
 while [[ "$#" -gt 0 ]]; do
     case $1 in
         -u|--user) REMOTE_USER="$2"; shift ;;
-        -s|--host) REMOTE_HOST="$2"; shift ;;
+        -h|--host) REMOTE_HOST="$2"; shift ;;
         --help) show_usage; exit 0 ;;
         *) echo "Unknown parameter: $1"; show_usage; exit 1 ;;
     esac
