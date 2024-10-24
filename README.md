@@ -1,4 +1,4 @@
-<img src="icon.png" alt="Bayrol Cloud" width="128" height="128">
+[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs)
 
 # Bayrol Cloud Integration for Home Assistant
 
@@ -81,23 +81,23 @@ Each controller will appear as a separate device in Home Assistant with its own 
 
 ### Development Installation Script
 
-A development installation script (`dev-install.sh`) is provided to easily update the integration on your Home Assistant instance during development:
+A development installation script (`dev-install.sh`) is provided to easily update the integration on your Home Assistant instance during development.
 
-1. Configure the script variables in `dev-install.sh`:
-   ```bash
-   REMOTE_USER="root"  # Your Home Assistant SSH user
-   REMOTE_HOST="homeassistant.local"  # Your Home Assistant IP or hostname
-   REMOTE_PATH="/config/custom_components"  # Path to custom_components
-   ```
+The script can be run in several ways:
 
-2. Make the script executable:
-   ```bash
-   chmod +x dev-install.sh
-   ```
-
-3. Run the script to deploy changes:
+1. Using default settings (root@homeassistant.local):
    ```bash
    ./dev-install.sh
+   ```
+
+2. Specifying custom user and host:
+   ```bash
+   ./dev-install.sh -u admin -s 192.168.1.100
+   ```
+
+3. View help and available options:
+   ```bash
+   ./dev-install.sh --help
    ```
 
 The script will:
