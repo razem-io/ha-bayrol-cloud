@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Configuration
+# Default Configuration
 REMOTE_USER="root"
 REMOTE_HOST="homeassistant.local"  # Change this to your Home Assistant IP or hostname
 REMOTE_PATH="/config/custom_components"
@@ -13,27 +13,29 @@ NC='\033[0m' # No Color
 
 # Show usage instructions
 show_usage() {
-    echo -e "\nUsage:"
-    echo "1. Edit the script variables if needed:"
-    echo "   - REMOTE_USER: The Home Assistant user (default: root)"
-    echo "   - REMOTE_HOST: Your Home Assistant hostname or IP"
-    echo "   - REMOTE_PATH: Path to custom_components directory"
-    echo ""
-    echo "2. Make the script executable:"
-    echo "   chmod +x dev-install.sh"
-    echo ""
-    echo "3. Run the script:"
-    echo "   ./dev-install.sh"
+    echo -e "\nUsage: ./dev-install.sh [-u user] [-h host]"
     echo ""
     echo "Options:"
-    echo "   -h, --help    Show this help message"
+    echo "   -u, --user    Remote user (default: root)"
+    echo "   -s, --host    Remote host (default: homeassistant.local)"
+    echo "   --help        Show this help message"
+    echo ""
+    echo "Example:"
+    echo "   ./dev-install.sh -u admin -s 192.168.1.100"
+    echo ""
+    echo "Note: Make sure the script is executable (chmod +x dev-install.sh)"
 }
 
-# Check for help flag
-if [[ "$1" == "-h" ]] || [[ "$1" == "--help" ]]; then
-    show_usage
-    exit 0
-fi
+# Parse command line arguments
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        -u|--user) REMOTE_USER="$2"; shift ;;
+        -s|--host) REMOTE_HOST="$2"; shift ;;
+        --help) show_usage; exit 0 ;;
+        *) echo "Unknown parameter: $1"; show_usage; exit 1 ;;
+    esac
+    shift
+done
 
 # Check if rsync is installed
 if ! command -v rsync &> /dev/null; then
@@ -41,6 +43,13 @@ if ! command -v rsync &> /dev/null; then
     show_usage
     exit 1
 fi
+
+# Display current configuration
+echo -e "Using configuration:"
+echo -e "  Remote User: ${GREEN}${REMOTE_USER}${NC}"
+echo -e "  Remote Host: ${GREEN}${REMOTE_HOST}${NC}"
+echo -e "  Remote Path: ${GREEN}${REMOTE_PATH}${NC}"
+echo ""
 
 # Sync files to Home Assistant
 echo "Syncing files to Home Assistant..."
