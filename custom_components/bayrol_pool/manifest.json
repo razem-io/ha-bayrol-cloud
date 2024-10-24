@@ -1,0 +1,12 @@
+{
+  "domain": "bayrol_pool",
+  "name": "Bayrol Pool Controller",
+  "documentation": "https://github.com/razem-io/ha-bayrol",
+  "issue_tracker": "https://github.com/razem-io/ha-bayrol/issues",
+  "dependencies": [],
+  "codeowners": ["@razem-io"],
+  "requirements": ["beautifulsoup4==4.12.2"],
+  "iot_class": "cloud_polling",
+  "version": "0.1.0",
+  "config_flow": true
+}
