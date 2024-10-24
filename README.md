@@ -4,7 +4,9 @@
 
 ⚠️ **BETA STATUS**: This integration is currently in beta. Please report any issues you encounter.
 
-This is a Home Assistant Custom Component for Bayrol Cloud. It currently allows you to monitor your pool's pH, Redox (ORP), and temperature values directly in Home Assistant.
+This is a Home Assistant Custom Component for the Bayrol Cloud. It currently allows you to monitor your pool's pH, Redox (ORP), and temperature values directly in Home Assistant.
+
+It currently only supports the German Bayrol Cloud services (https://www.bayrol-poolaccess.de), because I do not have access to others yet. If you can help with other Bayrol Cloud instances, open an issue. PRs are always welcome.
 
 ## Tested Devices
 
@@ -44,7 +46,7 @@ Have a different Bayrol device? Please [open an issue](https://github.com/razem-
 
 ### Manual Installation
 
-1. Copy the `custom_components/bayrol_pool` directory to your Home Assistant's `custom_components` directory
+1. Copy the `custom_components/bayrol_cloud` directory to your Home Assistant's `custom_components` directory
 2. Restart Home Assistant
 
 ## Configuration

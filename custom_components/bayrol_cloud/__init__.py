@@ -27,7 +27,7 @@ from .api import BayrolPoolAPI
 
 _LOGGER = logging.getLogger(__name__)
 
-DOMAIN = "bayrol_pool"
+DOMAIN = "bayrol_cloud"
 CONF_CID = "cid"
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]

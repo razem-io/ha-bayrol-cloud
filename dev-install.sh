@@ -4,7 +4,7 @@
 REMOTE_USER="root"
 REMOTE_HOST="homeassistant.local"  # Change this to your Home Assistant IP or hostname
 REMOTE_PATH="/config/custom_components"
-LOCAL_COMPONENT="custom_components/bayrol_pool"
+LOCAL_COMPONENT="custom_components/bayrol_cloud"
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -46,7 +46,7 @@ fi
 echo "Syncing files to Home Assistant..."
 rsync -av --delete \
     "${LOCAL_COMPONENT}/" \
-    "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}/bayrol_pool/"
+    "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}/bayrol_cloud/"
 
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}Files synced successfully!${NC}"
