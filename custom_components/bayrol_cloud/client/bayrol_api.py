@@ -29,6 +29,7 @@ class BayrolPoolAPI:
         self._username = username
         self._password = password
         self._phpsessid = None
+        _LOGGER.debug("BayrolPoolAPI initialized with session: %s", id(session))
 
     def _get_headers(self, additional_headers: Dict[str, str] | None = None) -> Dict[str, str]:
         """Get headers with optional additions and session cookie if available."""
@@ -40,6 +41,7 @@ class BayrolPoolAPI:
         if additional_headers:
             headers.update(additional_headers)
             
+        _LOGGER.debug("Generated headers: %s", headers)
         return headers
 
     async def login(self, username: str | None = None, password: str | None = None) -> bool:
@@ -58,6 +60,10 @@ class BayrolPoolAPI:
             _LOGGER.debug("Initializing session...")
             init_url = f"{self.BASE_URL}/m/login.php"
             
+            # Clear any existing cookies
+            self._session.cookie_jar.clear()
+            self._phpsessid = None
+            
             init_headers = self._get_headers({
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/png,image/svg+xml,*/*;q=0.8",
                 "Upgrade-Insecure-Requests": "1",
@@ -66,8 +72,12 @@ class BayrolPoolAPI:
                 "Sec-Fetch-Site": "none",
             })
             
-            async with self._session.get(init_url, headers=init_headers) as response:
+            _LOGGER.debug("Making initial GET request to %s", init_url)
+            async with self._session.get(init_url, headers=init_headers, allow_redirects=True) as response:
+                _LOGGER.debug("Initial response status: %s", response.status)
+                _LOGGER.debug("Initial response headers: %s", response.headers)
                 html = await response.text()
+                _LOGGER.debug("Initial response content length: %d", len(html))
                 
                 # Get all cookies from the response
                 cookies = response.cookies
@@ -101,7 +111,8 @@ class BayrolPoolAPI:
                 form = soup.find('form', {'id': 'form_login'})
                 
                 if not form:
-                    _LOGGER.error("Could not find login form")
+                    _LOGGER.error("Could not find login form in HTML response")
+                    _LOGGER.debug("HTML content: %s", html[:1000])  # Log first 1000 chars
                     return False
 
                 # Get all input fields from the form
@@ -119,7 +130,7 @@ class BayrolPoolAPI:
                 _LOGGER.debug("Form fields: %s", list(form_data.keys()))
 
             # Try to login with the complete form data
-            _LOGGER.debug("Attempting login...")
+            _LOGGER.debug("Attempting login POST request...")
             login_url = f"{self.BASE_URL}/m/login.php?r=reg"
             
             login_headers = self._get_headers({
@@ -133,8 +144,12 @@ class BayrolPoolAPI:
                 "Sec-Fetch-Site": "same-origin",
             })
 
+            _LOGGER.debug("Making login POST request to %s with headers: %s", login_url, login_headers)
             async with self._session.post(login_url, headers=login_headers, data=form_data, allow_redirects=True) as response:
+                _LOGGER.debug("Login response status: %s", response.status)
+                _LOGGER.debug("Login response headers: %s", response.headers)
                 content = await response.text()
+                _LOGGER.debug("Login response content length: %d", len(content))
                 
                 # Check if we're logged in by looking for typical error messages
                 if "Fehler" in content or "Zeit abgelaufen" in content:
@@ -143,8 +158,10 @@ class BayrolPoolAPI:
                     if error:
                         error_text = error.text.strip()
                         _LOGGER.error("Login error: %s", error_text)
+                    _LOGGER.debug("Login response content: %s", content[:1000])  # Log first 1000 chars
                     return False
                 
+                _LOGGER.debug("Login successful")
                 return True
 
         except Exception as err:
@@ -167,8 +184,13 @@ class BayrolPoolAPI:
         })
 
         try:
+            _LOGGER.debug("Getting controllers from %s", url)
             async with self._session.get(url, headers=headers) as response:
+                _LOGGER.debug("Get controllers response status: %s", response.status)
+                _LOGGER.debug("Get controllers response headers: %s", response.headers)
                 html = await response.text()
+                _LOGGER.debug("Get controllers response content length: %d", len(html))
+                
                 soup = BeautifulSoup(html, 'html.parser')
                 
                 controllers = []
@@ -193,6 +215,7 @@ class BayrolPoolAPI:
                             "name": name
                         })
                 
+                _LOGGER.debug("Found controllers: %s", controllers)
                 return controllers
 
         except Exception as err:
@@ -216,12 +239,18 @@ class BayrolPoolAPI:
                 "Sec-Fetch-Site": "same-origin",
             })
 
+            _LOGGER.debug("Getting data from %s", url)
             async with self._session.get(url, headers=headers) as response:
+                _LOGGER.debug("Get data response status: %s", response.status)
+                _LOGGER.debug("Get data response headers: %s", response.headers)
+                
                 if response.status != 200:
                     _LOGGER.error("Data fetch failed with status: %s", response.status)
                     return {}
                 
                 html = await response.text()
+                _LOGGER.debug("Get data response content length: %d", len(html))
+                
                 soup = BeautifulSoup(html, 'html.parser')
                 
                 # Extract values from the HTML response
@@ -242,6 +271,7 @@ class BayrolPoolAPI:
                 if not data:
                     _LOGGER.error("No data found in response: %s", html)
                 
+                _LOGGER.debug("Got data: %s", data)
                 return data
 
         except Exception as err:

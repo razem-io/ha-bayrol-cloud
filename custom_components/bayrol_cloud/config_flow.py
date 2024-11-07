@@ -11,7 +11,7 @@ from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers.aiohttp_client import async_create_clientsession
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.const import CONF_USERNAME, CONF_PASSWORD
 
 from . import DOMAIN, CONF_CID
@@ -29,39 +29,44 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
 async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
     """Validate the user input allows us to connect."""
 
-    # Create a new session specifically for validation
-    session = async_create_clientsession(hass)
-    api = BayrolPoolAPI(
-        session=session,
-        username=data[CONF_USERNAME],
-        password=data[CONF_PASSWORD],
-    )
+    _LOGGER.debug("Starting validation of input")
+
+    # Get shared session
+    session = async_get_clientsession(hass)
+    
+    # Initialize API without credentials (like test_api.py)
+    api = BayrolPoolAPI(session)
 
     try:
-        # Attempt login with retries
-        login_success = False
-        for _ in range(3):  # Try up to 3 times
-            try:
-                if await api.login():
-                    login_success = True
-                    break
-            except Exception as err:
-                _LOGGER.debug("Login attempt failed: %s", err)
-                await session.close()  # Close the session before retrying
-                session = async_create_clientsession(hass)  # Create a new session
-                api = BayrolPoolAPI(session=session, username=data[CONF_USERNAME], password=data[CONF_PASSWORD])
-
-        if not login_success:
-            _LOGGER.error("Failed to login after multiple attempts")
+        # Test login (passing credentials directly like test_api.py)
+        _LOGGER.debug("Testing login...")
+        if not await api.login(data[CONF_USERNAME], data[CONF_PASSWORD]):
+            _LOGGER.error("Login failed")
             raise InvalidAuth
+        
+        _LOGGER.debug("Login successful")
 
         # Get list of controllers
+        _LOGGER.debug("Discovering controllers...")
         controllers = await api.get_controllers()
         if not controllers:
             _LOGGER.error("No controllers found")
             raise CannotConnect
+        
+        _LOGGER.debug(f"Found {len(controllers)} controller(s)")
+        
+        # Test data fetch for each controller (like test_api.py)
+        for controller in controllers:
+            _LOGGER.debug(f"Testing controller: {controller['name']} (CID: {controller['cid']})...")
+            
+            controller_data = await api.get_data(controller['cid'])
+            if not controller_data:
+                _LOGGER.error("No data found for controller")
+                raise CannotConnect
+            
+            _LOGGER.debug("Data fetch successful")
+            _LOGGER.debug("Current values: %s", controller_data)
 
-        _LOGGER.debug("Found controllers: %s", controllers)
         return {
             "controllers": controllers,
             "username": data[CONF_USERNAME],
@@ -72,10 +77,8 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
         _LOGGER.error("Error connecting to Bayrol Pool Access: %s", err)
         raise CannotConnect
     except Exception as err:
-        _LOGGER.error("Unexpected error: %s", err, exc_info=True)
+        _LOGGER.error("Unexpected error: %s", err)
         raise CannotConnect
-    finally:
-        await session.close()  # Always close the validation session
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Bayrol Pool Controller."""

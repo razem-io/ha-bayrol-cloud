@@ -127,6 +127,28 @@ If you encounter any issues:
 3. Check the Home Assistant logs for any error messages
 4. Try running the test script to verify API connectivity
 
+### Checking Component Logs
+
+To enable debug logs for the Bayrol Cloud integration:
+
+1. Add the following to your `configuration.yaml`:
+   ```yaml
+   logger:
+     default: info
+     logs:
+       custom_components.bayrol_cloud: debug
+   ```
+2. Restart Home Assistant
+3. Access the logs through:
+   - Home Assistant UI: Settings -> System -> Logs
+   - Command line: `tail -f /config/home-assistant.log | grep bayrol_cloud`
+
+The debug logs will show:
+- API requests and responses
+- Data updates from your pool controller
+- Authentication status
+- Any errors or issues that occur
+
 ## Support
 
 For bugs, feature requests, or to add support for new devices, please [open an issue](https://github.com/razem-io/ha-bayrol-cloud/issues) on GitHub.
