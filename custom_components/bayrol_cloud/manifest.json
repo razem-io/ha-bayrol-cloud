@@ -7,7 +7,7 @@
   "codeowners": ["@razem-io"],
   "requirements": ["beautifulsoup4==4.12.2"],
   "iot_class": "cloud_polling",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "config_flow": true,
   "license": "MIT"
 }
