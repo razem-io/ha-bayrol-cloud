@@ -10,6 +10,8 @@ from custom_components.bayrol_cloud.client.parser import (
 # Sample device HTML outputs
 POOL_RELAX_CL_HTML = """<div><div class="gapp_"></div><div class="tab_data_link" onclick="document.location.href='device.php?c=XXXXX'"><div class="gstat_ok"></div><div class="tab_box stat_ok"><span>pH&nbsp;[pH]</span><h1>7.17</h1></div><div class="tab_box stat_ok"><span>mV&nbsp;[mV]</span><h1>708</h1></div><div class="tab_box stat_ok"><span>T&nbsp;[°C]</span><h1>34.4</h1></div><div class="tab_box "></div><div class="tab_info"><span>24PR3-1928</span></br><span>Pool Relax Cl</span></br><span>v3.5/220211 PR3</span></br><span><a href="device.php?c=XXXXX">Direct access</a></div></div></div>"""
 
+AUTOMATIC_CL_PH_HTML = """<div><div class="gapp_ase" onclick="gotoapp(28354)"><span>App Link<span></div><div class="tab_data_link" onclick="document.location.href='device.php?c=XXXXX&s=v1.40 (220715)'"><div class="gstat_warning"></div><div class="tab_box stat_warning"><span>pH&nbsp;[pH]</span><h1>6.5</h1></div><div class="tab_box stat_warning"><span>Redox&nbsp;[mV]</span><h1>685</h1></div><div class="tab_box stat_warning"><span>Temp.&nbsp;[°C]</span><h1>19.0</h1></div><div class="tab_box "></div><div class="tab_info"><span>22ACL2-02745</span></br><span>Automatic Cl-pH</span></br><span>v1.40 (220715)</span></br><span><a href="device.php?c=XXXXX&s=v1.40 (220715)">Accès direct</a></div></div></div>"""
+
 EMPTY_HTML = "<div></div>"
 INVALID_HTML = "<div><div class='tab_box'><span>pH [pH]</span><h1>invalid</h1></div></div>"
 
@@ -21,6 +23,16 @@ def test_parse_pool_data_pool_relax_cl():
         "pH": 7.17,
         "mV": 708.0,
         "T": 34.4,
+    }
+
+def test_parse_pool_data_automatic_cl_ph():
+    """Test parsing pool data from Automatic Cl-pH device."""
+    data = parse_pool_data(AUTOMATIC_CL_PH_HTML)
+    
+    assert data == {
+        "pH": 6.5,
+        "mV": 685.0,
+        "T": 19.0,
     }
 
 def test_parse_pool_data_empty():

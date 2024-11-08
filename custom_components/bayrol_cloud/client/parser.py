@@ -71,16 +71,31 @@ def parse_pool_data(html: str) -> Dict[str, Any]:
     
     boxes = soup.find_all("div", class_="tab_box")
     
+    measurement_map = {
+        'pH': 'pH',
+        'Redox': 'mV',
+        'Temp.': 'T',
+        'mV': 'mV',
+        'T': 'T'
+    }
+    
     for box in boxes:
         span = box.find("span")
         h1 = box.find("h1")
         if span and h1:
-            label = span.text.strip().split()[0]  # Get first word (pH, mV, T)
-            value = h1.text.strip()
-            try:
-                data[label] = float(value)
-            except ValueError:
-                _LOGGER.warning("Could not convert value to float: %s", value)
+            # Extract the label before the unit
+            label_text = span.text.strip()
+            label_match = re.match(r'^([^[]+)', label_text)
+            if label_match:
+                raw_label = label_match.group(1).strip()
+                # Map the raw label to standardized key
+                label = measurement_map.get(raw_label)
+                if label:
+                    value = h1.text.strip()
+                    try:
+                        data[label] = float(value)
+                    except ValueError:
+                        _LOGGER.warning("Could not convert value to float: %s", value)
     
     if not data:
         _LOGGER.error("No data found in response: %s", html)
