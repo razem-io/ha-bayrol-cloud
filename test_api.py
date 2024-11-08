@@ -4,7 +4,7 @@ import aiohttp
 import argparse
 import sys
 import logging
-from bayrol_api import BayrolPoolAPI
+from custom_components.bayrol_cloud.client.bayrol_api import BayrolPoolAPI
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -13,11 +13,12 @@ _LOGGER = logging.getLogger(__name__)
 async def test_bayrol_api(username: str, password: str):
     """Test Bayrol Pool Access API authentication and data fetching."""
     async with aiohttp.ClientSession() as session:
-        api = BayrolPoolAPI(session)
+        # Initialize API with credentials
+        api = BayrolPoolAPI(session, username, password)
 
         # Test login
         print("\nTesting login...")
-        if not await api.login(username, password):
+        if not await api.login():
             print("❌ Login failed")
             return False
         
