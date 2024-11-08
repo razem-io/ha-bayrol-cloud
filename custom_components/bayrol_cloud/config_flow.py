@@ -15,7 +15,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.const import CONF_USERNAME, CONF_PASSWORD
 
 from . import DOMAIN, CONF_CID
-from .api import BayrolPoolAPI
+from .client.bayrol_api import BayrolPoolAPI
 
 _LOGGER = logging.getLogger(__name__)
 

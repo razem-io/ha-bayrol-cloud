@@ -24,6 +24,9 @@ Have a different Bayrol device? Please [open an issue](https://github.com/razem-
   - pH Level
   - Redox/ORP (mV)
   - Temperature
+- Debug mode for troubleshooting:
+  - Captures raw HTML responses
+  - Accessible through Home Assistant developer tools
 - Automatic data updates every 5 minutes
 - Easy configuration through the Home Assistant UI
 - Automatic discovery of all your pool controllers
@@ -69,6 +72,45 @@ For each controller (where `CID` is your Controller ID), the integration provide
 - `sensor.bayrol_cloud_CID_temperature`: Current water temperature in °C
 
 Each controller will appear as a separate device in Home Assistant with its own set of sensors.
+
+## Debug Mode
+
+Each device comes with a debug switch that can be used to capture raw HTML responses from the Bayrol Cloud API. This is particularly useful when:
+- Troubleshooting issues
+- Adding support for new device types
+- Understanding the data structure
+
+### Using Debug Mode
+
+1. Find your device's debug switch in Home Assistant:
+   - Go to Settings -> Devices & Services
+   - Click on your Bayrol Cloud device
+   - Look for the switch named "[Device Name] Debug Mode"
+   - Or find it directly as `switch.bayrol_cloud_CID_debug`
+
+2. Enable debug mode:
+   - Toggle the debug switch to ON
+   - The integration will start capturing raw HTML responses
+
+3. Access the debug information:
+   - Go to Developer Tools -> States
+   - Search for your debug switch entity (e.g., `switch.bayrol_cloud_CID_debug`)
+   - Look in the attributes section
+   - You'll find the raw HTML response under `debug_raw_html`
+
+Example of accessing debug data:
+```yaml
+switch.bayrol_cloud_12345_debug:
+  state: 'on'
+  attributes:
+    debug_raw_html: '<html>... raw HTML response from Bayrol Cloud API ...</html>'
+    friendly_name: 'Pool Controller Debug Mode'
+    icon: 'mdi:bug'
+```
+
+4. When finished:
+   - Toggle the debug switch to OFF
+   - Debug data will be cleared
 
 ## Development
 
@@ -126,6 +168,7 @@ If you encounter any issues:
 2. Ensure your Bayrol Cloud Access account is active and working
 3. Check the Home Assistant logs for any error messages
 4. Try running the test script to verify API connectivity
+5. Enable debug mode to capture raw API responses
 
 ### Checking Component Logs
 

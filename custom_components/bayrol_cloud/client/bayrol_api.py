@@ -1,39 +1,48 @@
-"""Bayrol Pool API client."""
-import logging
-from typing import Any, Dict, Optional
+"""API client for Bayrol Pool Controller."""
+from typing import Dict, Any
+import re
 
 import aiohttp
 
 from .http_client import BayrolHttpClient
 
-_LOGGER = logging.getLogger(__name__)
-
 class BayrolPoolAPI:
-    """Bayrol Pool API client."""
+    """API client for Bayrol Pool Controller."""
 
-    def __init__(self, session: aiohttp.ClientSession, username: str | None = None, password: str | None = None):
+    def __init__(self, session: aiohttp.ClientSession):
         """Initialize the API client."""
-        self._username = username
-        self._password = password
         self._client = BayrolHttpClient(session)
 
-    async def login(self, username: str | None = None, password: str | None = None) -> bool:
+    @property
+    def debug_mode(self) -> bool:
+        """Get debug mode status."""
+        return self._client.debug_mode
+
+    @debug_mode.setter
+    def debug_mode(self, value: bool) -> None:
+        """Set debug mode status."""
+        self._client.debug_mode = value
+
+    @property
+    def last_raw_html(self) -> str | None:
+        """Get last raw HTML if debug mode is enabled."""
+        raw_html = self._client.last_raw_html
+        if raw_html:
+            # Replace CIDs in URLs and onclick handlers
+            raw_html = re.sub(r'(?:device\.php\?c=|c=)(\d+)', r'device.php?c=XXXXX', raw_html)
+        return raw_html
+
+    async def login(self, username: str, password: str) -> bool:
         """Login to Bayrol Pool Access."""
-        if username:
-            self._username = username
-        if password:
-            self._password = password
-
-        if not self._username or not self._password:
-            _LOGGER.error("Username and password are required")
-            return False
-
-        return await self._client.login(self._username, self._password)
+        return await self._client.login(username, password)
 
     async def get_controllers(self) -> list[dict[str, str]]:
-        """Get list of controllers from plants page."""
+        """Get list of controllers."""
         return await self._client.get_controllers()
 
     async def get_data(self, cid: str) -> Dict[str, Any]:
         """Get pool data for a specific controller."""
-        return await self._client.get_data(cid)
+        data = await self._client.get_data(cid)
+        if self.debug_mode:
+            data["debug_raw_html"] = self.last_raw_html
+        return data

@@ -28,7 +28,26 @@ class BayrolHttpClient:
         """Initialize the HTTP client."""
         self._session = session
         self._phpsessid: Optional[str] = None
+        self._debug_mode = False
+        self._last_raw_html = None
         _LOGGER.debug("BayrolHttpClient initialized with session: %s", id(session))
+
+    @property
+    def debug_mode(self) -> bool:
+        """Get debug mode status."""
+        return self._debug_mode
+
+    @debug_mode.setter
+    def debug_mode(self, value: bool) -> None:
+        """Set debug mode status."""
+        self._debug_mode = value
+        if not value:
+            self._last_raw_html = None
+
+    @property
+    def last_raw_html(self) -> Optional[str]:
+        """Get last raw HTML if debug mode is enabled."""
+        return self._last_raw_html if self._debug_mode else None
 
     def _get_headers(self, additional_headers: Dict[str, str] | None = None) -> Dict[str, str]:
         """Get headers with optional additions and session cookie if available."""
@@ -135,6 +154,8 @@ class BayrolHttpClient:
             async with self._session.get(url, headers=headers) as response:
                 _LOGGER.debug("Get controllers response status: %s", response.status)
                 html = await response.text()
+                if self._debug_mode:
+                    self._last_raw_html = html
                 return parse_controllers(html)
 
         except Exception as err:
@@ -161,6 +182,8 @@ class BayrolHttpClient:
                     return {}
                 
                 html = await response.text()
+                if self._debug_mode:
+                    self._last_raw_html = html
                 return parse_pool_data(html)
 
         except Exception as err:
