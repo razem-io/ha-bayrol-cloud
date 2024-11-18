@@ -1,13 +1,14 @@
 """Parser utilities for Bayrol Pool API responses."""
 import logging
 import re
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 from bs4 import BeautifulSoup
 
 _LOGGER = logging.getLogger(__name__)
 
 def parse_login_form(html: str) -> Dict[str, str]:
     """Parse login form and extract all form fields."""
+    _LOGGER.debug("Attempting to parse login form")
     soup = BeautifulSoup(html, 'html.parser')
     form = soup.find('form', {'id': 'form_login'})
     
@@ -22,27 +23,38 @@ def parse_login_form(html: str) -> Dict[str, str]:
         value = input_field.get('value', '')
         if name:
             form_data[name] = value
+            _LOGGER.debug("Found form field: %s", name)
             
+    _LOGGER.debug("Successfully parsed login form with fields: %s", list(form_data.keys()))
     return form_data
 
 def check_login_error(html: str) -> bool:
     """Check if login response contains error messages."""
+    _LOGGER.debug("Checking for login errors")
     if "Fehler" in html or "Zeit abgelaufen" in html:
         soup = BeautifulSoup(html, 'html.parser')
         error = soup.find('div', class_='error_text')
         if error:
             error_text = error.text.strip()
             _LOGGER.error("Login error: %s", error_text)
+        else:
+            _LOGGER.error("Generic login error detected but couldn't find specific error message")
         return True
     return False
 
 def parse_controllers(html: str) -> List[Dict[str, str]]:
     """Parse controllers from plants page HTML."""
+    _LOGGER.debug("Starting to parse controllers from HTML")
     soup = BeautifulSoup(html, 'html.parser')
     controllers = []
     
     # Find all divs that contain controller information
-    for div in soup.find_all('div', onclick=re.compile(r'plant_settings\.php\?c=\d+')):
+    controller_divs = soup.find_all('div', onclick=re.compile(r'plant_settings\.php\?c=\d+'))
+    if not controller_divs:
+        _LOGGER.error("No controller divs found in HTML")
+        return controllers
+
+    for div in controller_divs:
         # Extract CID from onclick attribute
         onclick = div.get('onclick', '')
         cid_match = re.search(r'c=(\d+)', onclick)
@@ -56,20 +68,49 @@ def parse_controllers(html: str) -> List[Dict[str, str]]:
                 spans = name_div.find_all('span')
                 if len(spans) >= 2:
                     name = spans[1].text.strip()
+                else:
+                    _LOGGER.warning("Controller %s: Expected at least 2 spans in tab_info, found %d", 
+                                  cid, len(spans))
+            else:
+                _LOGGER.warning("Controller %s: Could not find tab_info div", cid)
             
             controllers.append({
                 "cid": cid,
                 "name": name
             })
+            _LOGGER.debug("Found controller: %s (CID: %s)", name, cid)
     
+    _LOGGER.debug("Successfully parsed %d controllers", len(controllers))
     return controllers
+
+class DebugInfo:
+    """Class to store debug information during parsing."""
+    def __init__(self):
+        self.parsing_errors: List[str] = []
+        self.measurements_found: List[str] = []
+        self.measurements_failed: List[str] = []
+
+    def to_dict(self) -> Dict[str, List[str]]:
+        """Convert debug info to dictionary."""
+        return {
+            "parsing_errors": self.parsing_errors,
+            "measurements_found": self.measurements_found,
+            "measurements_failed": self.measurements_failed
+        }
 
 def parse_pool_data(html: str) -> Dict[str, Any]:
     """Parse pool data from getdata response HTML."""
+    _LOGGER.debug("Starting to parse pool data")
     soup = BeautifulSoup(html, 'html.parser')
     data = {}
+    debug = DebugInfo()
     
     boxes = soup.find_all("div", class_="tab_box")
+    if not boxes:
+        error_msg = "No tab_box divs found in HTML response"
+        _LOGGER.error(error_msg)
+        debug.parsing_errors.append(error_msg)
+        return data
     
     measurement_map = {
         'pH': 'pH',
@@ -94,10 +135,25 @@ def parse_pool_data(html: str) -> Dict[str, Any]:
                     value = h1.text.strip()
                     try:
                         data[label] = float(value)
+                        debug.measurements_found.append(f"{label}: {value}")
+                        _LOGGER.debug("Successfully parsed %s: %s", label, value)
                     except ValueError:
-                        _LOGGER.warning("Could not convert value to float: %s", value)
+                        error_msg = f"Failed to convert value '{value}' to float for measurement '{label}'"
+                        _LOGGER.error(error_msg)
+                        debug.measurements_failed.append(error_msg)
+                else:
+                    error_msg = f"Unknown measurement label: {raw_label}"
+                    _LOGGER.warning(error_msg)
+                    debug.parsing_errors.append(error_msg)
     
     if not data:
-        _LOGGER.error("No data found in response: %s", html)
+        error_msg = "No valid measurements found in response"
+        _LOGGER.error(error_msg)
+        debug.parsing_errors.append(error_msg)
+    else:
+        _LOGGER.debug("Successfully parsed pool data: %s", data)
+    
+    # Store debug info in the logger context for Home Assistant to access
+    _LOGGER.debug("Debug information: %s", debug.to_dict())
         
     return data
