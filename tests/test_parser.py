@@ -5,12 +5,15 @@ from custom_components.bayrol_cloud.client.parser import (
     parse_controllers,
     parse_login_form,
     check_login_error,
+    check_device_offline,
 )
 
 # Sample device HTML outputs
 POOL_RELAX_CL_HTML = """<div><div class="gapp_"></div><div class="tab_data_link" onclick="document.location.href='device.php?c=XXXXX'"><div class="gstat_ok"></div><div class="tab_box stat_ok"><span>pH&nbsp;[pH]</span><h1>7.17</h1></div><div class="tab_box stat_ok"><span>mV&nbsp;[mV]</span><h1>708</h1></div><div class="tab_box stat_ok"><span>T&nbsp;[°C]</span><h1>34.4</h1></div><div class="tab_box "></div><div class="tab_info"><span>24PR3-1928</span></br><span>Pool Relax Cl</span></br><span>v3.5/220211 PR3</span></br><span><a href="device.php?c=XXXXX">Direct access</a></div></div></div>"""
 
 AUTOMATIC_CL_PH_HTML = """<div><div class="gapp_ase" onclick="gotoapp(28354)"><span>App Link<span></div><div class="tab_data_link" onclick="document.location.href='device.php?c=XXXXX&s=v1.40 (220715)'"><div class="gstat_warning"></div><div class="tab_box stat_warning"><span>pH&nbsp;[pH]</span><h1>6.5</h1></div><div class="tab_box stat_warning"><span>Redox&nbsp;[mV]</span><h1>685</h1></div><div class="tab_box stat_warning"><span>Temp.&nbsp;[°C]</span><h1>19.0</h1></div><div class="tab_box "></div><div class="tab_info"><span>22ACL2-02745</span></br><span>Automatic Cl-pH</span></br><span>v1.40 (220715)</span></br><span><a href="device.php?c=XXXXX&s=v1.40 (220715)">Accès direct</a></div></div></div>"""
+
+OFFLINE_DEVICE_HTML = """<div><div class="gapp_"></div><div class="tab_data_link" onclick="document.location.href='help.php#offline'"><div class="gstat_error"></div><div class="tab_error">No connection to the controller since 13.11.24, 07:10 UTC<br>Click here for additional information</div><div class="tab_info"><span>24PR3-1928</span></br><span></span></br><span></span></br><span><a href="help.php#offline">Direct access</a></div></div></div>"""
 
 EMPTY_HTML = "<div></div>"
 INVALID_HTML = "<div><div class='tab_box'><span>pH [pH]</span><h1>invalid</h1></div></div>"
@@ -23,6 +26,7 @@ def test_parse_pool_data_pool_relax_cl():
         "pH": 7.17,
         "mV": 708.0,
         "T": 34.4,
+        "status": "online"
     }
 
 def test_parse_pool_data_automatic_cl_ph():
@@ -33,7 +37,32 @@ def test_parse_pool_data_automatic_cl_ph():
         "pH": 6.5,
         "mV": 685.0,
         "T": 19.0,
+        "status": "online"
     }
+
+def test_parse_pool_data_offline_device():
+    """Test parsing pool data from offline device."""
+    data = parse_pool_data(OFFLINE_DEVICE_HTML)
+    
+    assert data == {
+        "status": "offline",
+        "device_id": "24PR3-1928",
+        "last_seen": "13.11.24, 07:10"
+    }
+
+def test_check_device_offline():
+    """Test detection of offline device status."""
+    result = check_device_offline(OFFLINE_DEVICE_HTML)
+    assert result == {
+        "status": "offline",
+        "device_id": "24PR3-1928",
+        "last_seen": "13.11.24, 07:10"
+    }
+
+def test_check_device_offline_online_device():
+    """Test offline check with online device."""
+    result = check_device_offline(POOL_RELAX_CL_HTML)
+    assert result is None
 
 def test_parse_pool_data_empty():
     """Test parsing empty HTML response."""
@@ -61,7 +90,8 @@ def test_parse_pool_data_partial_data():
     data = parse_pool_data(html)
     assert data == {
         "pH": 7.2,
-        "T": 30.5
+        "T": 30.5,
+        "status": "online"
     }
 
 def test_parse_controllers():

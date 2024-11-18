@@ -3,6 +3,7 @@ import logging
 import re
 from typing import Any, Dict, List, Optional, Tuple
 from bs4 import BeautifulSoup
+from datetime import datetime
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -98,12 +99,45 @@ class DebugInfo:
             "measurements_failed": self.measurements_failed
         }
 
+def check_device_offline(html: str) -> Optional[Dict[str, Any]]:
+    """Check if the device is offline and extract offline information."""
+    soup = BeautifulSoup(html, 'html.parser')
+    error_div = soup.find('div', class_='tab_error')
+    
+    if error_div and "No connection to the controller" in error_div.text:
+        # Extract the last seen time
+        time_match = re.search(r'since (\d{2}\.\d{2}\.\d{2}, \d{2}:\d{2}) UTC', error_div.text)
+        
+        # Extract device ID
+        info_div = soup.find('div', class_='tab_info')
+        device_id = None
+        if info_div:
+            device_span = info_div.find('span')
+            if device_span:
+                device_id = device_span.text.strip()
+        
+        offline_info = {
+            "status": "offline",
+            "device_id": device_id,
+            "last_seen": time_match.group(1) if time_match else None
+        }
+        
+        _LOGGER.debug("Device is offline: %s", offline_info)
+        return offline_info
+    
+    return None
+
 def parse_pool_data(html: str) -> Dict[str, Any]:
     """Parse pool data from getdata response HTML."""
     _LOGGER.debug("Starting to parse pool data")
     soup = BeautifulSoup(html, 'html.parser')
     data = {}
     debug = DebugInfo()
+    
+    # First check if device is offline
+    offline_info = check_device_offline(html)
+    if offline_info:
+        return offline_info
     
     boxes = soup.find_all("div", class_="tab_box")
     if not boxes:
@@ -152,6 +186,7 @@ def parse_pool_data(html: str) -> Dict[str, Any]:
         debug.parsing_errors.append(error_msg)
     else:
         _LOGGER.debug("Successfully parsed pool data: %s", data)
+        data["status"] = "online"
     
     # Store debug info in the logger context for Home Assistant to access
     _LOGGER.debug("Debug information: %s", debug.to_dict())
