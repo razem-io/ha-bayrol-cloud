@@ -1,6 +1,7 @@
 """Switch platform for Bayrol Pool Controller."""
 from __future__ import annotations
 
+from datetime import datetime
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -34,6 +35,8 @@ class BayrolDebugSwitch(CoordinatorEntity, SwitchEntity):
         self._cid = entry.data[CONF_CID]
         self._api = api
         device_name = entry.data.get("device_name", "Pool Controller")
+        self._version = "0.1.4"  # Version from manifest.json
+        self._last_updated = None
         
         # Set both entity_id and unique_id with the same format as sensors
         self.entity_id = f"switch.bayrol_cloud_{self._cid}_debug"
@@ -57,15 +60,24 @@ class BayrolDebugSwitch(CoordinatorEntity, SwitchEntity):
     @property
     def extra_state_attributes(self):
         """Return debug data when available."""
+        attributes = {
+            "version": self._version,
+        }
+        
+        if self._last_updated:
+            attributes["last_updated"] = self._last_updated
+            
         if self.is_on and self.coordinator.data and "debug_raw_html" in self.coordinator.data:
-            return {
-                "debug_raw_html": self.coordinator.data["debug_raw_html"]
-            }
-        return {}
+            attributes["debug_raw_html"] = self.coordinator.data["debug_raw_html"]
+            self._last_updated = datetime.now().isoformat()
+            attributes["last_updated"] = self._last_updated
+            
+        return attributes
 
     async def async_turn_on(self, **kwargs) -> None:
         """Turn on debug mode."""
         self._api.debug_mode = True
+        self._last_updated = datetime.now().isoformat()
         self.async_write_ha_state()
         # Force an immediate data refresh to get debug data
         await self.coordinator.async_request_refresh()
