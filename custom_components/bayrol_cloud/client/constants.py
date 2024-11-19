@@ -5,7 +5,7 @@ BASE_URL = "https://www.bayrol-poolaccess.de/webview"
 # Common headers used in all requests
 BASE_HEADERS = {
     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:131.0) Gecko/20100101 Firefox/131.0",
-    "Accept-Language": "de,en-US;q=0.7,en;q=0.3",
+    "Accept-Language": "en-US;q=0.7,en;q=0.3",
     "Accept-Encoding": "gzip, deflate, br, zstd",
     "Connection": "keep-alive",
     "Sec-Fetch-User": "?1",
