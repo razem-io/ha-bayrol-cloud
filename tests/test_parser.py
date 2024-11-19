@@ -1,11 +1,13 @@
 """Test cases for the Bayrol Cloud parser module."""
 import pytest
+import logging
 from custom_components.bayrol_cloud.client.parser import (
     parse_pool_data,
     parse_controllers,
     parse_login_form,
     check_login_error,
     check_device_offline,
+    DebugInfo,
 )
 
 # Sample device HTML outputs
@@ -26,18 +28,24 @@ def test_parse_pool_data_pool_relax_cl():
         "pH": 7.17,
         "mV": 708.0,
         "T": 34.4,
-        "status": "online"
+        "status": "online",
+        "pH_alarm": False,
+        "mV_alarm": False,
+        "T_alarm": False
     }
 
 def test_parse_pool_data_automatic_cl_ph():
-    """Test parsing pool data from Automatic Cl-pH device."""
+    """Test parsing pool data from Automatic Cl-pH device with alarms."""
     data = parse_pool_data(AUTOMATIC_CL_PH_HTML)
     
     assert data == {
         "pH": 6.5,
         "mV": 685.0,
         "T": 19.0,
-        "status": "online"
+        "status": "online",
+        "pH_alarm": True,
+        "mV_alarm": True,
+        "T_alarm": True
     }
 
 def test_parse_pool_data_offline_device():
@@ -91,8 +99,61 @@ def test_parse_pool_data_partial_data():
     assert data == {
         "pH": 7.2,
         "T": 30.5,
-        "status": "online"
+        "status": "online",
+        "pH_alarm": False,
+        "T_alarm": False
     }
+
+def test_parse_pool_data_mixed_alarms():
+    """Test parsing HTML with mixed alarm states."""
+    html = """<div>
+        <div class="tab_box stat_warning"><span>pH [pH]</span><h1>7.2</h1></div>
+        <div class="tab_box"><span>mV [mV]</span><h1>685</h1></div>
+        <div class="tab_box stat_warning"><span>T [°C]</span><h1>30.5</h1></div>
+    </div>"""
+    data = parse_pool_data(html)
+    assert data == {
+        "pH": 7.2,
+        "mV": 685.0,
+        "T": 30.5,
+        "status": "online",
+        "pH_alarm": True,
+        "mV_alarm": False,
+        "T_alarm": True
+    }
+
+def test_debug_info_partial_data(caplog):
+    """Test debug info for partial data parse with log capture."""
+    html = """<div>
+        <div class="tab_box"><span>pH [pH]</span><h1>7.2</h1></div>
+        <div class="tab_box"><span>mV [mV]</span><h1>invalid</h1></div>
+        <div class="tab_box"><span>Unknown [X]</span><h1>123</h1></div>
+    </div>"""
+    
+    # Set up logging capture
+    caplog.set_level(logging.DEBUG)
+    
+    # Parse the data
+    data = parse_pool_data(html)
+    
+    # Verify the data itself
+    assert data == {
+        "pH": 7.2,
+        "status": "online",
+        "pH_alarm": False
+    }
+    
+    # Verify debug info in logs
+    debug_info_log = None
+    for record in caplog.records:
+        if "Debug information" in record.message:
+            debug_info_log = record.message
+            break
+    
+    assert debug_info_log is not None
+    assert "Unknown measurement label: Unknown" in debug_info_log
+    assert "pH: 7.2" in debug_info_log
+    assert "Failed to convert value 'invalid' to float for measurement 'mV'" in debug_info_log
 
 def test_parse_controllers():
     """Test parsing controllers from plants page."""

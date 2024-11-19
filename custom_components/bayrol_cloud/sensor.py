@@ -118,6 +118,15 @@ class BayrolPoolSensor(CoordinatorEntity, SensorEntity):
         return self.coordinator.data.get(self._key)
 
     @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return the state attributes."""
+        attrs = {}
+        alarm_key = f"{self._key}_alarm"
+        if self.coordinator.data and alarm_key in self.coordinator.data:
+            attrs["alarm"] = self.coordinator.data[alarm_key]
+        return attrs
+
+    @property
     def available(self) -> bool:
         """Return if entity is available."""
         if not super().available or self.coordinator.data is None:
