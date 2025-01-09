@@ -30,7 +30,7 @@ _LOGGER = logging.getLogger(__name__)
 DOMAIN = "bayrol_cloud"
 CONF_CID = "cid"
 
-PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.SWITCH]
+PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.SWITCH, Platform.BINARY_SENSOR]
 
 CONFIG_SCHEMA = vol.Schema(
     {

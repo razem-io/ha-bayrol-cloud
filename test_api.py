@@ -13,8 +13,9 @@ _LOGGER = logging.getLogger(__name__)
 async def test_bayrol_api(username: str, password: str):
     """Test Bayrol Pool Access API authentication and data fetching."""
     async with aiohttp.ClientSession() as session:
-        # Initialize API
+        # Initialize API with debug mode
         api = BayrolPoolAPI(session)
+        api.debug_mode = True
 
         # Test login
         print("\nTesting login...")
@@ -45,7 +46,13 @@ async def test_bayrol_api(username: str, password: str):
             print("✅ Data fetch successful")
             print("\nCurrent values:")
             for key, value in data.items():
-                print(f"  {key}: {value}")
+                if key != "debug_raw_html":  # Print all values except raw HTML
+                    print(f"  {key}: {value}")
+            
+            # Print raw HTML for debugging
+            if "debug_raw_html" in data:
+                print("\nRaw HTML response:")
+                print(data["debug_raw_html"])
 
         return True
 

@@ -169,8 +169,9 @@ def parse_pool_data(html: str) -> Dict[str, Any]:
                     value = h1.text.strip()
                     try:
                         data[label] = float(value)
-                        # Always set alarm state (True if warning, False if not)
-                        has_alarm = 'stat_warning' in box.get('class', [])
+                        # Check for both warning and alarm states
+                        box_classes = box.get('class', [])
+                        has_alarm = 'stat_warning' in box_classes or 'stat_alarm' in box_classes
                         data[f"{label}_alarm"] = has_alarm
                         debug.measurements_found.append(f"{label}: {value}")
                         _LOGGER.debug("Successfully parsed %s: %s (alarm: %s)", 
