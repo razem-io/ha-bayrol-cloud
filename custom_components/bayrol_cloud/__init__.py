@@ -110,6 +110,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         data = await api.get_data(entry.data[CONF_CID])
                         
                         if data:
+                            # Get device status data
+                            device_status = await api.get_device_status(entry.data[CONF_CID])
+                            if device_status:
+                                data["device_status"] = device_status
+                            
                             _LOGGER.debug("Data fetch successful: %s", data)
                             return data
                         
@@ -119,6 +124,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                             # Try getting data again after successful login
                             data = await api.get_data(entry.data[CONF_CID])
                             if data:
+                                # Get device status data
+                                device_status = await api.get_device_status(entry.data[CONF_CID])
+                                if device_status:
+                                    data["device_status"] = device_status
+                                
                                 _LOGGER.debug("Data fetch after login successful: %s", data)
                                 return data
                     

@@ -75,6 +75,49 @@ async def async_setup_entry(
         ),
     ]
 
+    def get_device_icon(name: str) -> str:
+        """Get the appropriate icon based on device name."""
+        name_lower = name.lower()
+        
+        if "pumpe" in name_lower or "pump" in name_lower:
+            return "mdi:pump"
+        elif "flockmatic" in name_lower:
+            return "mdi:water"
+        elif "alarm" in name_lower:
+            return "mdi:alarm-light"
+        elif "ph" in name_lower:
+            return "mdi:ph"
+        elif "redox" in name_lower or "rx" in name_lower:
+            return "mdi:flash"
+        elif "temp" in name_lower:
+            return "mdi:thermometer"
+        elif "chlor" in name_lower or "cl" in name_lower:
+            return "mdi:molecule"
+        elif "filter" in name_lower:
+            return "mdi:air-filter"
+        elif "heizung" in name_lower or "heat" in name_lower:
+            return "mdi:radiator"
+        elif "licht" in name_lower or "light" in name_lower:
+            return "mdi:lightbulb"
+        elif "schaltausgang" in name_lower or "output" in name_lower:
+            return "mdi:electric-switch-closed"
+        else:
+            return "mdi:electric-switch"  # Default icon
+
+    # Add device status sensors dynamically based on what's found in the data
+    if coordinator.data and "device_status" in coordinator.data:
+        for sensor_id, sensor_data in coordinator.data["device_status"].items():
+            sensors.append(
+                BayrolDeviceStatusSensor(
+                    coordinator,
+                    entry,
+                    sensor_id,
+                    f"bayrol_cloud_{cid}_{sensor_id}",
+                    sensor_data["name"],
+                    get_device_icon(sensor_data["name"]),
+                )
+            )
+
     async_add_entities(sensors)
 
 class BayrolPoolSensor(CoordinatorEntity, SensorEntity):
@@ -184,3 +227,87 @@ class BayrolPoolStatusSensor(CoordinatorEntity, SensorEntity):
     def available(self) -> bool:
         """Return if entity is available."""
         return super().available and self.coordinator.data is not None
+
+class BayrolDeviceStatusSensor(CoordinatorEntity, SensorEntity):
+    """Representation of a Bayrol device status sensor."""
+
+    def __init__(
+        self,
+        coordinator: DataUpdateCoordinator,
+        entry: ConfigEntry,
+        key: str,
+        entity_id: str,
+        name: str,
+        icon: str,
+    ) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._key = key
+        self.entity_id = f"sensor.{entity_id}"
+        device_name = entry.data.get("device_name", "Pool Controller")
+        self._attr_name = f"{device_name} {name}"
+        self._attr_unique_id = f"bayrol_cloud_{entry.data[CONF_CID]}_{key}"
+        self._attr_icon = icon
+
+        # Device info
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, f"bayrol_cloud_{entry.data[CONF_CID]}")},
+            "name": f"{device_name} ({entry.data[CONF_CID]})",
+            "manufacturer": "Bayrol",
+            "model": device_name,
+        }
+
+    @property
+    def native_value(self) -> StateType:
+        """Return the state of the sensor."""
+        if not self.coordinator.data or "device_status" not in self.coordinator.data:
+            return None
+            
+        device_data = self.coordinator.data["device_status"].get(self._key)
+        if not device_data:
+            return None
+            
+        return device_data.get("current_text")
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return the state attributes."""
+        attrs = {}
+        
+        if (self.coordinator.data and 
+            "device_status" in self.coordinator.data and 
+            self._key in self.coordinator.data["device_status"]):
+            
+            device_data = self.coordinator.data["device_status"][self._key]
+            
+            # Add current value
+            if "current_value" in device_data:
+                attrs["value"] = device_data["current_value"]
+            
+            # Add available options
+            if "options" in device_data:
+                attrs["available_options"] = [
+                    {"text": opt["text"], "value": opt["value"]}
+                    for opt in device_data["options"]
+                ]
+                
+            # Add item number for reference
+            if "item_number" in device_data:
+                attrs["item_number"] = device_data["item_number"]
+        
+        return attrs
+
+    @property
+    def available(self) -> bool:
+        """Return if entity is available."""
+        if not super().available or self.coordinator.data is None:
+            return False
+        
+        # If device is offline, mark sensors as unavailable
+        if self.coordinator.data.get("status") == "offline":
+            return False
+            
+        return (
+            "device_status" in self.coordinator.data and
+            self._key in self.coordinator.data["device_status"]
+        )

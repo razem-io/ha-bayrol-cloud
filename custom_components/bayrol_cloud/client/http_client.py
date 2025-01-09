@@ -162,6 +162,34 @@ class BayrolHttpClient:
             _LOGGER.error("Error getting controllers: %s", err, exc_info=True)
             return []
 
+    async def get_device_status(self, cid: str) -> str:
+        """Get device status page HTML for a specific controller."""
+        if not self._phpsessid:
+            _LOGGER.error("No session ID available. Please login first.")
+            return ""
+
+        try:
+            url = f"{BASE_URL}/p/device.php?c={cid}"
+            headers = self._get_headers()
+            headers["Referer"] = f"{BASE_URL}/m/plants.php"
+
+            _LOGGER.debug("Getting device status from %s", url)
+            async with self._session.get(url, headers=headers) as response:
+                _LOGGER.debug("Get device status response status: %s", response.status)
+                
+                if response.status != 200:
+                    _LOGGER.error("Device status fetch failed with status: %s", response.status)
+                    return ""
+                
+                html = await response.text()
+                if self._debug_mode:
+                    self._last_raw_html = html
+                return html
+
+        except Exception as err:
+            _LOGGER.error("Error getting device status: %s", err, exc_info=True)
+            return ""
+
     async def get_data(self, cid: str) -> Dict[str, Any]:
         """Get pool data for a specific controller."""
         if not self._phpsessid:

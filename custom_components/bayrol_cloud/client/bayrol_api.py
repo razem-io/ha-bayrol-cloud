@@ -5,6 +5,7 @@ import re
 import aiohttp
 
 from .http_client import BayrolHttpClient
+from .device_parser import parse_device_status
 
 class BayrolPoolAPI:
     """API client for Bayrol Pool Controller."""
@@ -39,6 +40,21 @@ class BayrolPoolAPI:
     async def get_controllers(self) -> list[dict[str, str]]:
         """Get list of controllers."""
         return await self._client.get_controllers()
+
+    async def get_device_status(self, cid: str, raw: bool = False) -> Dict[str, Any] | str:
+        """Get device status for a specific controller.
+        
+        Args:
+            cid: Controller ID
+            raw: If True, returns raw HTML instead of parsed data
+        
+        Returns:
+            Dict of parsed status data, or raw HTML if raw=True
+        """
+        html = await self._client.get_device_status(cid)
+        if raw:
+            return html
+        return parse_device_status(html)
 
     async def get_data(self, cid: str) -> Dict[str, Any]:
         """Get pool data for a specific controller."""
