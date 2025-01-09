@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 import asyncio
 import aiohttp
-import argparse
 import sys
 import logging
+import os
 from custom_components.bayrol_cloud.client.bayrol_api import BayrolPoolAPI
 
 # Set up logging
@@ -13,12 +13,12 @@ _LOGGER = logging.getLogger(__name__)
 async def test_bayrol_api(username: str, password: str):
     """Test Bayrol Pool Access API authentication and data fetching."""
     async with aiohttp.ClientSession() as session:
-        # Initialize API with credentials
-        api = BayrolPoolAPI(session, username, password)
+        # Initialize API
+        api = BayrolPoolAPI(session)
 
         # Test login
         print("\nTesting login...")
-        if not await api.login():
+        if not await api.login(username, password):
             print("❌ Login failed")
             return False
         
@@ -50,16 +50,18 @@ async def test_bayrol_api(username: str, password: str):
         return True
 
 def main():
-    parser = argparse.ArgumentParser(description='Test Bayrol Pool Access API')
-    parser.add_argument('--username', required=True, help='Bayrol Pool Access username')
-    parser.add_argument('--password', required=True, help='Bayrol Pool Access password')
-    
-    args = parser.parse_args()
+    # Get credentials from environment variables
+    username = os.environ.get('BAYROL_USERNAME')
+    password = os.environ.get('BAYROL_PASSWORD')
+
+    if not username or not password:
+        print("❌ Error: Environment variables BAYROL_USERNAME and BAYROL_PASSWORD must be set")
+        sys.exit(1)
 
     print("Testing Bayrol Pool Access API connection...")
-    print(f"Username: {args.username}")
+    print(f"Username: {username}")
 
-    result = asyncio.run(test_bayrol_api(args.username, args.password))
+    result = asyncio.run(test_bayrol_api(username, password))
     
     if not result:
         print("\n❌ API test failed")
