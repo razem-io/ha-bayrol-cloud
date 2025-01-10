@@ -11,6 +11,7 @@ from .constants import (
     LOGIN_HEADERS,
     CONTROLLERS_HEADERS,
     DATA_HEADERS,
+    JSON_HEADERS,
 )
 from .parser import (
     parse_login_form,
@@ -217,3 +218,141 @@ class BayrolHttpClient:
         except Exception as err:
             _LOGGER.error("Error getting pool data: %s", err, exc_info=True)
             return {}
+
+    async def set_controller_password(self, cid: str, password: str) -> bool:
+        """Set the controller password."""
+        if not self._phpsessid:
+            _LOGGER.error("No session ID available. Please login first.")
+            return False
+
+        try:
+            url = f"{BASE_URL}/data_json.php"
+            headers = self._get_headers(JSON_HEADERS)
+            headers["Referer"] = f"{BASE_URL}/p/device.php?c={cid}"
+
+            data = {
+                "device": cid,
+                "action": "setCode",
+                "data": {
+                    "code": password
+                }
+            }
+
+            _LOGGER.debug("Setting controller password...")
+            async with self._session.post(url, headers=headers, json=data) as response:
+                if response.status != 200:
+                    _LOGGER.error("Failed to set controller password: %s", response.status)
+                    return False
+
+                response_text = await response.text()
+                return '"error":""' in response_text
+
+        except Exception as err:
+            _LOGGER.error("Error setting controller password: %s", err, exc_info=True)
+            return False
+
+    async def get_controller_access(self, cid: str, password: str) -> bool:
+        """Get access to controller settings using password."""
+        if not self._phpsessid:
+            _LOGGER.error("No session ID available. Please login first.")
+            return False
+
+        try:
+            # First get the main device page
+            _LOGGER.debug("Accessing main device page...")
+            main_url = f"{BASE_URL}/p/device.php?c={cid}"
+            headers = self._get_headers()
+            headers["Referer"] = f"{BASE_URL}/m/plants.php"
+            
+            async with self._session.get(main_url, headers=headers) as response:
+                if response.status != 200:
+                    _LOGGER.error("Failed to access main device page: %s", response.status)
+                    return False
+                
+                _LOGGER.debug("Successfully accessed main device page")
+
+            # Now submit the device password
+            url = f"{BASE_URL}/data_json.php"
+            headers = self._get_headers(JSON_HEADERS)
+            headers["Referer"] = main_url
+
+            # First set the code
+            set_code_data = {
+                "device": cid,
+                "action": "setCode",
+                "data": {
+                    "code": password
+                }
+            }
+
+            _LOGGER.debug("Setting controller password...")
+            async with self._session.post(url, headers=headers, json=set_code_data) as response:
+                if response.status != 200:
+                    _LOGGER.error("Failed to set controller password: %s", response.status)
+                    return False
+
+                response_text = await response.text()
+                if '"error":""' not in response_text:
+                    _LOGGER.error("Failed to set controller password")
+                    return False
+
+                _LOGGER.debug("Successfully set controller password")
+
+            # Then get access
+            get_access_data = {
+                "device": cid,
+                "action": "getAccess",
+                "data": {
+                    "code": password
+                }
+            }
+
+            _LOGGER.debug("Getting controller access...")
+            async with self._session.post(url, headers=headers, json=get_access_data) as response:
+                if response.status != 200:
+                    _LOGGER.error("Failed to get controller access: %s", response.status)
+                    return False
+
+                response_text = await response.text()
+                if '"data":{"access":true}' not in response_text:
+                    _LOGGER.error("Controller password not accepted")
+                    return False
+
+                _LOGGER.debug("Controller access granted")
+                return True
+
+        except Exception as err:
+            _LOGGER.error("Error getting controller access: %s", err, exc_info=True)
+            return False
+
+    async def set_items(self, cid: str, items: list[dict]) -> bool:
+        """Set controller items (settings)."""
+        if not self._phpsessid:
+            _LOGGER.error("No session ID available. Please login first.")
+            return False
+
+        try:
+            url = f"{BASE_URL}/data_json.php"
+            headers = self._get_headers(JSON_HEADERS)
+            headers["Referer"] = f"{BASE_URL}/p/device.php?c={cid}"
+
+            data = {
+                "device": cid,
+                "action": "setItems",
+                "data": {
+                    "items": items
+                }
+            }
+
+            _LOGGER.debug("Setting items: %s", items)
+            async with self._session.post(url, headers=headers, json=data) as response:
+                if response.status != 200:
+                    _LOGGER.error("Failed to set items: %s", response.status)
+                    return False
+
+                response_text = await response.text()
+                return '"error":""' in response_text
+
+        except Exception as err:
+            _LOGGER.error("Error setting items: %s", err, exc_info=True)
+            return False

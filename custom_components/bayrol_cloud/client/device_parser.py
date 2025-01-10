@@ -20,19 +20,15 @@ def parse_device_status(html: str) -> Dict[str, Any]:
         name = device_div.text.strip()
         sensor_id = name.lower().replace(' ', '_').replace('(', '').replace(')', '')
         
-        # Get the parent i_item div to extract its item number (e.g. item4_27)
-        device_item = device_div.find_parent('div', class_='i_item')
-        if not device_item:
+        # Find the corresponding mode div (next sibling with i_item class)
+        mode_item = device_div.find_parent('div', class_='i_item').find_next_sibling('div', class_='i_item')
+        if not mode_item:
             continue
             
-        item_class = device_item.get('class', [])
+        # Get the item number from the mode div (e.g. item3_153)
+        item_class = mode_item.get('class', [])
         item_number = next((c for c in item_class if c.startswith('item')), None)
         if not item_number:
-            continue
-            
-        # Find the corresponding mode div (next sibling with i_item class)
-        mode_item = device_item.find_next_sibling('div', class_='i_item')
-        if not mode_item:
             continue
             
         # Get the select element with operating modes

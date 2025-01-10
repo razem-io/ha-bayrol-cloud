@@ -8,7 +8,7 @@ import voluptuous as vol
 import aiohttp
 
 from homeassistant import config_entries
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -16,6 +16,7 @@ from homeassistant.const import CONF_USERNAME, CONF_PASSWORD
 
 from . import DOMAIN, CONF_CID
 from .client.bayrol_api import BayrolPoolAPI
+from .const import CONF_SETTINGS_PASSWORD
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -23,6 +24,7 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_USERNAME): str,
         vol.Required(CONF_PASSWORD): str,
+        vol.Optional(CONF_SETTINGS_PASSWORD, default="1234"): str,
     }
 )
 
@@ -66,6 +68,22 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
             
             _LOGGER.debug("Data fetch successful")
             _LOGGER.debug("Current values: %s", controller_data)
+            
+            # If settings password is provided, set and validate it
+            if CONF_SETTINGS_PASSWORD in data:
+                _LOGGER.debug("Setting and testing settings password...")
+                
+                # First set the password
+                if not await api.set_controller_password(controller['cid'], data[CONF_SETTINGS_PASSWORD]):
+                    _LOGGER.error("Failed to set settings password")
+                    raise InvalidSettingsAuth
+                
+                # Then verify we can get access with it
+                if not await api.get_controller_access(controller['cid'], data[CONF_SETTINGS_PASSWORD]):
+                    _LOGGER.error("Failed to verify settings password")
+                    raise InvalidSettingsAuth
+                
+                _LOGGER.debug("Settings password validated successfully")
 
         return {
             "controllers": controllers,
@@ -104,6 +122,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         "device_name": controller["name"]
                     }
                     
+                    # Add settings password if provided
+                    if CONF_SETTINGS_PASSWORD in user_input:
+                        entry_data[CONF_SETTINGS_PASSWORD] = user_input[CONF_SETTINGS_PASSWORD]
+                    
                     # Set unique ID based on CID
                     await self.async_set_unique_id(f"bayrol_{controller['cid']}")
                     self._abort_if_unique_id_configured()
@@ -115,6 +137,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "cannot_connect"
             except InvalidAuth:
                 errors["base"] = "invalid_auth"
+            except InvalidSettingsAuth:
+                errors["base"] = "invalid_settings_auth"
             except Exception:  # pylint: disable=broad-except
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
@@ -123,8 +147,113 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user", data_schema=STEP_USER_DATA_SCHEMA, errors=errors
         )
 
+    @staticmethod
+    @callback
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> config_entries.OptionsFlow:
+        """Create the options flow."""
+        return OptionsFlowHandler(config_entry)
+
+class OptionsFlowHandler(config_entries.OptionsFlow):
+    """Handle options flow for Bayrol Pool Controller."""
+
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        """Initialize options flow."""
+        self.config_entry = config_entry
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Manage options."""
+        if user_input is not None:
+            # Validate the new settings password
+            session = async_get_clientsession(self.hass)
+            api = BayrolPoolAPI(session)
+
+            try:
+                # Login first
+                if not await api.login(
+                    self.config_entry.data[CONF_USERNAME],
+                    self.config_entry.data[CONF_PASSWORD]
+                ):
+                    return self.async_abort(reason="auth_failed")
+
+                # First set the new password
+                if not await api.set_controller_password(
+                    self.config_entry.data[CONF_CID],
+                    user_input[CONF_SETTINGS_PASSWORD]
+                ):
+                    _LOGGER.error("Failed to set new settings password")
+                    return self.async_show_form(
+                        step_id="init",
+                        data_schema=vol.Schema({
+                            vol.Required(
+                                CONF_SETTINGS_PASSWORD,
+                                default=self.config_entry.data.get(CONF_SETTINGS_PASSWORD, "1234")
+                            ): str,
+                        }),
+                        errors={"base": "invalid_settings_auth"},
+                    )
+
+                # Then verify we can get access with it
+                if not await api.get_controller_access(
+                    self.config_entry.data[CONF_CID],
+                    user_input[CONF_SETTINGS_PASSWORD]
+                ):
+                    _LOGGER.error("Failed to verify new settings password")
+                    return self.async_show_form(
+                        step_id="init",
+                        data_schema=vol.Schema({
+                            vol.Required(
+                                CONF_SETTINGS_PASSWORD,
+                                default=self.config_entry.data.get(CONF_SETTINGS_PASSWORD, "1234")
+                            ): str,
+                        }),
+                        errors={"base": "invalid_settings_auth"},
+                    )
+
+                # Update the config entry with the new settings password
+                new_data = {**self.config_entry.data}
+                new_data[CONF_SETTINGS_PASSWORD] = user_input[CONF_SETTINGS_PASSWORD]
+                self.hass.config_entries.async_update_entry(
+                    self.config_entry,
+                    data=new_data
+                )
+
+                # Reload the integration to apply the new settings
+                await self.hass.config_entries.async_reload(self.config_entry.entry_id)
+
+                return self.async_create_entry(title="", data=user_input)
+
+            except Exception as err:
+                _LOGGER.error("Error validating settings password: %s", err)
+                return self.async_show_form(
+                    step_id="init",
+                    data_schema=vol.Schema({
+                        vol.Required(
+                            CONF_SETTINGS_PASSWORD,
+                            default=self.config_entry.data.get(CONF_SETTINGS_PASSWORD, "1234")
+                        ): str,
+                    }),
+                    errors={"base": "unknown"},
+                )
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema({
+                vol.Required(
+                    CONF_SETTINGS_PASSWORD,
+                    default=self.config_entry.data.get(CONF_SETTINGS_PASSWORD, "1234")
+                ): str,
+            }),
+        )
+
 class CannotConnect(HomeAssistantError):
     """Error to indicate we cannot connect."""
 
 class InvalidAuth(HomeAssistantError):
     """Error to indicate there is invalid auth."""
+
+class InvalidSettingsAuth(HomeAssistantError):
+    """Error to indicate there is invalid settings password."""

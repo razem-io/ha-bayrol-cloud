@@ -30,7 +30,7 @@ _LOGGER = logging.getLogger(__name__)
 DOMAIN = "bayrol_cloud"
 CONF_CID = "cid"
 
-PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.SWITCH, Platform.BINARY_SENSOR]
+PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.SWITCH, Platform.BINARY_SENSOR, Platform.SELECT]
 
 CONFIG_SCHEMA = vol.Schema(
     {
@@ -127,9 +127,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                                 # Get device status data
                                 device_status = await api.get_device_status(entry.data[CONF_CID])
                                 if device_status:
+                                    # Compare with previous device status to see what changed
+                                    if coordinator.data and "device_status" in coordinator.data:
+                                        old_status = coordinator.data["device_status"]
+                                        for device_id, new_state in device_status.items():
+                                            if device_id in old_status:
+                                                old_state = old_status[device_id]
+                                                if old_state.get("current_value") != new_state.get("current_value"):
+                                                    _LOGGER.debug(
+                                                        "Device %s state changed: %s -> %s",
+                                                        device_id,
+                                                        old_state.get("current_text"),
+                                                        new_state.get("current_text")
+                                                    )
+                                    
                                     data["device_status"] = device_status
                                 
-                                _LOGGER.debug("Data fetch after login successful: %s", data)
+                                _LOGGER.debug("Data fetch successful: %s", data)
                                 return data
                     
                     except Exception as err:

@@ -6,17 +6,35 @@
                 "description": "Please enter your Bayrol Cloud credentials. All your configured controllers will be added automatically.",
                 "data": {
                     "username": "Username (Email)",
-                    "password": "Password"
+                    "password": "Password",
+                    "settings_password": "[Optional] Settings Password (default: 1234)"
                 }
             }
         },
         "error": {
             "cannot_connect": "Failed to connect",
             "invalid_auth": "Invalid authentication",
+            "invalid_settings_auth": "Invalid settings password",
             "unknown": "Unexpected error"
         },
         "abort": {
-            "already_configured": "Controller is already configured"
+            "already_configured": "Controller is already configured",
+            "auth_failed": "Failed to authenticate with current credentials"
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Configure Bayrol Pool Controller",
+                "description": "Change the settings password used to control outputs.",
+                "data": {
+                    "settings_password": "Settings Password"
+                }
+            }
+        },
+        "error": {
+            "invalid_settings_auth": "Invalid settings password",
+            "unknown": "Unexpected error"
         }
     }
 }

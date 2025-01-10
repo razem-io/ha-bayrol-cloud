@@ -62,3 +62,44 @@ class BayrolPoolAPI:
         if self.debug_mode:
             data["debug_raw_html"] = self.last_raw_html
         return data
+
+    async def set_controller_password(self, cid: str, password: str) -> bool:
+        """Set the controller password.
+        
+        Args:
+            cid: Controller ID
+            password: Password to set for controller settings access
+            
+        Returns:
+            True if password was set successfully, False otherwise
+        """
+        return await self._client.set_controller_password(cid, password)
+
+    async def get_controller_access(self, cid: str, password: str) -> bool:
+        """Get access to controller settings using password.
+        
+        Args:
+            cid: Controller ID
+            password: Password to use for controller settings access
+            
+        Returns:
+            True if access was granted, False otherwise
+        """
+        return await self._client.get_controller_access(cid, password)
+
+    async def set_items(self, cid: str, items: list[dict]) -> bool:
+        """Set controller items (settings).
+        
+        Args:
+            cid: Controller ID
+            items: List of items to set, each item being a dict with:
+                  - topic: The item topic (e.g. "3.153" for alarm relay mode)
+                  - name: Item name
+                  - value: List of values (e.g. [1, 0] for on/off)
+                  - valid: Validation flag (usually 1)
+                  - cmd: Command flag (usually 0)
+            
+        Returns:
+            True if items were set successfully, False otherwise
+        """
+        return await self._client.set_items(cid, items)

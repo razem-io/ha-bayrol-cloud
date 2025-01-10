@@ -1,4 +1,3 @@
-"""Switch platform for Bayrol Pool Controller."""
 from __future__ import annotations
 
 from datetime import datetime
