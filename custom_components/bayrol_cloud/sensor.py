@@ -75,20 +75,6 @@ async def async_setup_entry(
         ),
     ]
 
-    # Add device status sensors dynamically based on what's found in the data
-    if coordinator.data and "device_status" in coordinator.data:
-        for sensor_id, sensor_data in coordinator.data["device_status"].items():
-            sensors.append(
-                BayrolDeviceStatusSensor(
-                    coordinator,
-                    entry,
-                    sensor_id,
-                    f"bayrol_cloud_{cid}_{sensor_id}",
-                    sensor_data["name"],
-                    get_device_icon(sensor_data["name"]),
-                )
-            )
-
     async_add_entities(sensors)
 
 class BayrolPoolSensor(BayrolEntity, SensorEntity):
@@ -158,61 +144,4 @@ class BayrolPoolStatusSensor(BayrolEntity, SensorEntity):
         if self.coordinator.data and self.coordinator.data.get("status") == "offline":
             attrs["last_seen"] = self.coordinator.data.get("last_seen")
             attrs["device_id"] = self.coordinator.data.get("device_id")
-        return attrs
-
-class BayrolDeviceStatusSensor(BayrolEntity, SensorEntity):
-    """Representation of a Bayrol device status sensor."""
-
-    def __init__(
-        self,
-        coordinator: DataUpdateCoordinator,
-        entry: ConfigEntry,
-        sensor_id: str,
-        entity_id: str,
-        name: str,
-        icon: str,
-    ) -> None:
-        """Initialize the sensor."""
-        super().__init__(coordinator, entry, sensor_id, name)
-        self.entity_id = f"sensor.{entity_id}"
-        self._attr_icon = icon  # Override the auto-generated icon
-
-    @property
-    def native_value(self) -> StateType:
-        """Return the state of the sensor."""
-        if not self.coordinator.data or "device_status" not in self.coordinator.data:
-            return None
-            
-        device_data = self.coordinator.data["device_status"].get(self._sensor_id)
-        if not device_data:
-            return None
-            
-        return device_data.get("current_text")
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return the state attributes."""
-        attrs = {}
-        
-        if (self.coordinator.data and 
-            "device_status" in self.coordinator.data and 
-            self._sensor_id in self.coordinator.data["device_status"]):
-            
-            device_data = self.coordinator.data["device_status"][self._sensor_id]
-            
-            # Add current value
-            if "current_value" in device_data:
-                attrs["value"] = device_data["current_value"]
-            
-            # Add available options
-            if "options" in device_data:
-                attrs["available_options"] = [
-                    {"text": opt["text"], "value": opt["value"]}
-                    for opt in device_data["options"]
-                ]
-                
-            # Add item number for reference
-            if "item_number" in device_data:
-                attrs["item_number"] = device_data["item_number"]
-        
         return attrs
