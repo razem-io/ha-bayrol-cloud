@@ -3,18 +3,18 @@
         "step": {
             "user": {
                 "title": "Connect to Bayrol Cloud",
-                "description": "Please enter your Bayrol Cloud credentials. All your configured controllers will be added automatically.",
+                "description": "Please enter your Bayrol Cloud credentials. All your configured controllers will be added automatically. The settings password is optional - you can still view settings without it.",
                 "data": {
                     "username": "Username (Email)",
                     "password": "Password",
-                    "settings_password": "[Optional] Settings Password (default: 1234)"
+                    "settings_password": "[Optional] Settings Password - required only if you want to change settings"
                 }
             }
         },
         "error": {
             "cannot_connect": "Failed to connect",
             "invalid_auth": "Invalid authentication",
-            "invalid_settings_auth": "Invalid settings password",
+            "invalid_settings_auth": "Invalid settings password - settings will be read-only",
             "unknown": "Unexpected error"
         },
         "abort": {
@@ -26,15 +26,38 @@
         "step": {
             "init": {
                 "title": "Configure Bayrol Pool Controller",
-                "description": "Change the settings password used to control outputs.",
+                "description": "Configure the settings password to enable changing settings. Leave empty to disable settings changes (values will still be displayed).",
                 "data": {
-                    "settings_password": "Settings Password"
+                    "settings_password": "[Optional] Settings Password - required only if you want to change settings"
                 }
             }
         },
         "error": {
-            "invalid_settings_auth": "Invalid settings password",
+            "invalid_settings_auth": "Invalid settings password - settings will be read-only",
             "unknown": "Unexpected error"
+        }
+    },
+    "entity": {
+        "select": {
+            "settings_state": {
+                "state": {
+                    "read_only": "Read-only - settings password not configured",
+                    "read_write": "Read/Write - settings can be changed",
+                    "error": "Error - settings password not accepted"
+                }
+            }
+        }
+    },
+    "services": {
+        "retry_settings_access": {
+            "name": "Retry Settings Access",
+            "description": "Retry accessing settings after a password error.",
+            "fields": {
+                "entity_id": {
+                    "name": "Entity",
+                    "description": "The select entity to retry settings access for."
+                }
+            }
         }
     }
 }

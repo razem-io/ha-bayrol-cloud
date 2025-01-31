@@ -24,7 +24,7 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_USERNAME): str,
         vol.Required(CONF_PASSWORD): str,
-        vol.Optional(CONF_SETTINGS_PASSWORD, default="1234"): str,
+        vol.Optional(CONF_SETTINGS_PASSWORD): str,
     }
 )
 
@@ -69,21 +69,22 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
             _LOGGER.debug("Data fetch successful")
             _LOGGER.debug("Current values: %s", controller_data)
             
-            # If settings password is provided, set and validate it
-            if CONF_SETTINGS_PASSWORD in data:
-                _LOGGER.debug("Setting and testing settings password...")
+            # If settings password is provided, try to validate it
+            if CONF_SETTINGS_PASSWORD in data and data[CONF_SETTINGS_PASSWORD]:
+                _LOGGER.debug("Testing settings password...")
                 
-                # First set the password
-                if not await api.set_controller_password(controller['cid'], data[CONF_SETTINGS_PASSWORD]):
-                    _LOGGER.error("Failed to set settings password")
-                    raise InvalidSettingsAuth
+                # Try to get access first
+                access_granted = await api.get_controller_access(controller['cid'], data[CONF_SETTINGS_PASSWORD])
                 
-                # Then verify we can get access with it
-                if not await api.get_controller_access(controller['cid'], data[CONF_SETTINGS_PASSWORD]):
-                    _LOGGER.error("Failed to verify settings password")
-                    raise InvalidSettingsAuth
-                
-                _LOGGER.debug("Settings password validated successfully")
+                if not access_granted:
+                    _LOGGER.warning("Settings password validation failed")
+                    data[CONF_SETTINGS_PASSWORD] = None  # Clear invalid password
+                    errors["settings_password"] = "invalid_settings_auth"
+                    return {
+                        "controllers": controllers,
+                        "username": data[CONF_USERNAME],
+                        "password": data[CONF_PASSWORD]
+                    }
 
         return {
             "controllers": controllers,
@@ -137,8 +138,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "cannot_connect"
             except InvalidAuth:
                 errors["base"] = "invalid_auth"
-            except InvalidSettingsAuth:
-                errors["base"] = "invalid_settings_auth"
             except Exception:  # pylint: disable=broad-except
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
@@ -167,84 +166,69 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
     ) -> FlowResult:
         """Manage options."""
         if user_input is not None:
-            # Validate the new settings password
-            session = async_get_clientsession(self.hass)
-            api = BayrolPoolAPI(session)
+            # Get the new settings password
+            settings_password = user_input.get(CONF_SETTINGS_PASSWORD)
+            
+            if settings_password:
+                session = async_get_clientsession(self.hass)
+                api = BayrolPoolAPI(session)
 
-            try:
-                # Login first
-                if not await api.login(
-                    self.config_entry.data[CONF_USERNAME],
-                    self.config_entry.data[CONF_PASSWORD]
-                ):
-                    return self.async_abort(reason="auth_failed")
+                try:
+                    # Login first
+                    if not await api.login(
+                        self.config_entry.data[CONF_USERNAME],
+                        self.config_entry.data[CONF_PASSWORD]
+                    ):
+                        return self.async_abort(reason="auth_failed")
 
-                # First set the new password
-                if not await api.set_controller_password(
-                    self.config_entry.data[CONF_CID],
-                    user_input[CONF_SETTINGS_PASSWORD]
-                ):
-                    _LOGGER.error("Failed to set new settings password")
-                    return self.async_show_form(
-                        step_id="init",
-                        data_schema=vol.Schema({
-                            vol.Required(
-                                CONF_SETTINGS_PASSWORD,
-                                default=self.config_entry.data.get(CONF_SETTINGS_PASSWORD, "1234")
-                            ): str,
-                        }),
-                        errors={"base": "invalid_settings_auth"},
+                    # Try to get access
+                    access_granted = await api.get_controller_access(
+                        self.config_entry.data[CONF_CID],
+                        settings_password
                     )
+                    
+                    if not access_granted:
+                        _LOGGER.warning("Settings password validation failed")
+                        settings_password = None  # Clear invalid password
+                        return self.async_show_form(
+                            step_id="init",
+                            data_schema=vol.Schema({
+                                vol.Optional(
+                                    CONF_SETTINGS_PASSWORD,
+                                    description={"suggested_value": None}
+                                ): str,
+                            }),
+                            errors={"settings_password": "invalid_settings_auth"},
+                            description_placeholders={
+                                "error_detail": "Invalid settings password - settings will be read-only"
+                            }
+                        )
 
-                # Then verify we can get access with it
-                if not await api.get_controller_access(
-                    self.config_entry.data[CONF_CID],
-                    user_input[CONF_SETTINGS_PASSWORD]
-                ):
-                    _LOGGER.error("Failed to verify new settings password")
-                    return self.async_show_form(
-                        step_id="init",
-                        data_schema=vol.Schema({
-                            vol.Required(
-                                CONF_SETTINGS_PASSWORD,
-                                default=self.config_entry.data.get(CONF_SETTINGS_PASSWORD, "1234")
-                            ): str,
-                        }),
-                        errors={"base": "invalid_settings_auth"},
-                    )
+                except Exception as err:
+                    _LOGGER.error("Error validating settings password: %s", err)
+                    settings_password = None
+            
+            user_input[CONF_SETTINGS_PASSWORD] = settings_password
 
-                # Update the config entry with the new settings password
-                new_data = {**self.config_entry.data}
-                new_data[CONF_SETTINGS_PASSWORD] = user_input[CONF_SETTINGS_PASSWORD]
-                self.hass.config_entries.async_update_entry(
-                    self.config_entry,
-                    data=new_data
-                )
+            # Update the config entry with the new settings
+            new_data = {**self.config_entry.data}
+            new_data[CONF_SETTINGS_PASSWORD] = user_input.get(CONF_SETTINGS_PASSWORD)
+            self.hass.config_entries.async_update_entry(
+                self.config_entry,
+                data=new_data
+            )
 
-                # Reload the integration to apply the new settings
-                await self.hass.config_entries.async_reload(self.config_entry.entry_id)
+            # Reload the integration to apply the new settings
+            await self.hass.config_entries.async_reload(self.config_entry.entry_id)
 
-                return self.async_create_entry(title="", data=user_input)
-
-            except Exception as err:
-                _LOGGER.error("Error validating settings password: %s", err)
-                return self.async_show_form(
-                    step_id="init",
-                    data_schema=vol.Schema({
-                        vol.Required(
-                            CONF_SETTINGS_PASSWORD,
-                            default=self.config_entry.data.get(CONF_SETTINGS_PASSWORD, "1234")
-                        ): str,
-                    }),
-                    errors={"base": "unknown"},
-                )
+            return self.async_create_entry(title="", data=user_input)
 
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema({
-                vol.Required(
+                vol.Optional(
                     CONF_SETTINGS_PASSWORD,
-                    default=self.config_entry.data.get(CONF_SETTINGS_PASSWORD, "1234")
+                    description={"suggested_value": self.config_entry.data.get(CONF_SETTINGS_PASSWORD)}
                 ): str,
             }),
         )

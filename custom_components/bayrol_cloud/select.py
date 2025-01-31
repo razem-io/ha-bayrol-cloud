@@ -6,6 +6,8 @@ import logging
 import re
 from typing import Any
 
+import voluptuous as vol
+
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -26,69 +28,63 @@ async def async_setup_entry(
     """Set up Bayrol Pool select based on a config entry."""
     coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
     api = hass.data[DOMAIN][entry.entry_id]["api"]
-    settings_password = entry.data.get(CONF_SETTINGS_PASSWORD, "1234")
+    settings_password = entry.data.get(CONF_SETTINGS_PASSWORD)
 
     selects = []
 
+    # Register retry service
+    async def handle_retry_access(call):
+        """Handle the service call."""
+        entity_id = call.data.get("entity_id")
+        if entity_id:
+            entity = next((select for select in selects if select.entity_id == entity_id), None)
+            if entity:
+                await entity.async_retry_access()
+
+    hass.services.async_register(
+        DOMAIN,
+        "retry_settings_access",
+        handle_retry_access,
+        schema=vol.Schema({
+            vol.Required("entity_id"): str,
+        })
+    )
+
     # Create selects for device status items that have multiple options
-    if coordinator.data and "device_status" in coordinator.data:
-        for sensor_id, sensor_data in coordinator.data["device_status"].items():
-            # Extract the item number from the full item class (e.g., "item3_153" -> "3.153")
-            # This is the number from the select element, not the display element
-            item_number = sensor_data["item_number"].replace("item", "").replace("_", ".")
-            _LOGGER.debug("Creating select for %s with item number %s", sensor_data["name"], item_number)
+    if coordinator.data:
+        device_status = coordinator.data.get("device_status", {})
+        if not device_status:
+            _LOGGER.warning("No device status data available - selects will be created on next update")
+            async_add_entities([])  # Add empty list but allow coordinator to create entities later
+            return
             
-            selects.append(
-                BayrolSettingSelect(
-                    coordinator,
-                    api,
-                    entry,
-                    sensor_id,
-                    item_number,
-                    sensor_data["name"],
-                    sensor_data["options"],
-                    settings_password,
+        for sensor_id, sensor_data in device_status.items():
+            try:
+                # Extract the item number from the full item class (e.g., "item3_153" -> "3.153")
+                # This is the number from the select element, not the display element
+                item_number = sensor_data["item_number"].replace("item", "").replace("_", ".")
+                _LOGGER.debug("Creating select for %s with item number %s", sensor_data["name"], item_number)
+                
+                selects.append(
+                    BayrolSettingSelect(
+                        coordinator,
+                        api,
+                        entry,
+                        sensor_id,
+                        item_number,
+                        sensor_data["name"],
+                        sensor_data["options"],
+                        settings_password,
+                    )
                 )
-            )
+            except Exception as err:
+                _LOGGER.error("Error creating select for %s: %s", sensor_id, err)
 
     async_add_entities(selects)
 
 class BayrolSettingSelect(BayrolEntity, SelectEntity):
     """Representation of a Bayrol setting select."""
 
-    @property
-    def assumed_state(self) -> bool:
-        """Return True if unable to access real state of the entity."""
-        return True  # Allow changing state back to previous values
-        
-    @property
-    def should_poll(self) -> bool:
-        """Return True if entity has to be polled for state."""
-        return False  # We don't poll since we use the coordinator
-        
-    async def async_added_to_hass(self) -> None:
-        """When entity is added to hass."""
-        await super().async_added_to_hass()
-        self._handle_coordinator_update()
-        
-    def _handle_coordinator_update(self) -> None:
-        """Handle updated data from the coordinator."""
-        if self.coordinator.data and "device_status" in self.coordinator.data:
-            device_data = self.coordinator.data["device_status"].get(self._sensor_id)
-            if device_data:
-                current_value = str(device_data.get("current_value"))
-                current_option = self._value_to_text.get(current_value)
-                _LOGGER.debug(
-                    "%s: State updated by coordinator: value=%s, option=%s, available=%s",
-                    self._attr_name,
-                    current_value,
-                    current_option,
-                    self.available
-                )
-                
-                # Force a state update to ensure Home Assistant knows about the change
-                self.async_write_ha_state()
-        
     def __init__(
         self,
         coordinator,
@@ -108,6 +104,8 @@ class BayrolSettingSelect(BayrolEntity, SelectEntity):
         self._settings_password = settings_password
         self._item_number = item_number
         self._options = options
+        self._access_failed = False
+        self._last_error = None
         
         # Map option values to their text representations
         self._value_to_text = {str(opt["value"]): opt["text"] for opt in options}
@@ -117,51 +115,171 @@ class BayrolSettingSelect(BayrolEntity, SelectEntity):
         self._attr_options = list(self._text_to_value.keys())
 
     @property
+    def assumed_state(self) -> bool:
+        """Return True if unable to access real state of the entity."""
+        return True  # Allow changing state back to previous values
+        
+    @property
+    def should_poll(self) -> bool:
+        """Return True if entity has to be polled for state."""
+        return False  # We don't poll since we use the coordinator
+
+    @property
+    def entity_registry_enabled_default(self) -> bool:
+        """Return if the entity should be enabled when first added."""
+        return True
+
+    @property
+    def available(self) -> bool:
+        """Return if entity is available."""
+        if not self.coordinator.data:
+            return False
+        device_status = self.coordinator.data.get("device_status", {})
+        return bool(device_status.get(self._sensor_id))
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return entity specific state attributes."""
+        attrs = {}
+        if not self._settings_password:
+            attrs["settings_access"] = "disabled"
+            attrs["settings_message"] = "Settings password not configured"
+            attrs["settings_state"] = "read_only"
+        elif self._access_failed:
+            attrs["settings_access"] = "error"
+            attrs["settings_message"] = f"Access denied: {self._last_error or 'Invalid password'}"
+            attrs["settings_state"] = "error"
+            attrs["can_retry"] = True
+        else:
+            attrs["settings_access"] = "enabled"
+            attrs["settings_message"] = "Settings access enabled"
+            attrs["settings_state"] = "read_write"
+        return attrs
+
+    async def async_retry_access(self) -> None:
+        """Service to retry settings access."""
+        self._access_failed = False
+        self._last_error = None
+        self.async_write_ha_state()
+        
+    async def async_added_to_hass(self) -> None:
+        """When entity is added to hass."""
+        await super().async_added_to_hass()
+        self._handle_coordinator_update()
+        
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        try:
+            if self.coordinator.data:
+                device_status = self.coordinator.data.get("device_status", {})
+                device_data = device_status.get(self._sensor_id)
+                if device_data:
+                    current_value = str(device_data.get("current_value"))
+                    current_option = self._value_to_text.get(current_value)
+                    _LOGGER.debug(
+                        "%s: State updated by coordinator: value=%s, option=%s, available=%s",
+                        self._attr_name,
+                        current_value,
+                        current_option,
+                        self.available
+                    )
+                else:
+                    _LOGGER.debug("%s: No device data in update", self._attr_name)
+                
+            # Always write state to ensure entity stays registered
+            self.async_write_ha_state()
+        except Exception as err:
+            _LOGGER.error("Error handling coordinator update for %s: %s", self._attr_name, err)
+            # Still write state to keep entity alive
+            self.async_write_ha_state()
+
+    @property
     def current_option(self) -> str | None:
         """Return the current option."""
-        if not self.available:
-            _LOGGER.debug("%s: Not available", self._attr_name)
-            return None
+        try:
+            if not self.coordinator.data:
+                _LOGGER.debug("%s: No coordinator data", self._attr_name)
+                return None
+                
+            device_status = self.coordinator.data.get("device_status", {})
+            if not device_status:
+                _LOGGER.debug("%s: No device status data", self._attr_name)
+                return None
+                
+            device_data = device_status.get(self._sensor_id)
+            if not device_data:
+                _LOGGER.debug("%s: No device data", self._attr_name)
+                return None
+                
+            current_value = str(device_data.get("current_value"))
+            current_option = self._value_to_text.get(current_value)
+            _LOGGER.debug("%s: Current value: %s, Current option: %s, Available options: %s", 
+                         self._attr_name, current_value, current_option, self._attr_options)
+            return current_option
             
-        device_data = self.coordinator.data["device_status"].get(self._sensor_id)
-        if not device_data:
-            _LOGGER.debug("%s: No device data", self._attr_name)
+        except Exception as err:
+            _LOGGER.error("Error getting current option for %s: %s", self._attr_name, err)
             return None
-            
-        current_value = str(device_data.get("current_value"))
-        current_option = self._value_to_text.get(current_value)
-        _LOGGER.debug("%s: Current value: %s, Current option: %s, Available options: %s", 
-                     self._attr_name, current_value, current_option, self._attr_options)
-        return current_option
+
+    @property
+    def disabled(self) -> bool:
+        """Return if entity should be disabled."""
+        return not self._settings_password or self._access_failed
 
     async def async_select_option(self, option: str) -> None:
+        """Change the selected option."""
         _LOGGER.debug(
             "%s: async_select_option called with option: %s (current option: %s)",
             self._attr_name,
             option,
             self.current_option
         )
-        """Change the selected option."""
+
+        # Check if settings password is configured
+        if not self._settings_password:
+            _LOGGER.warning(
+                "%s: Cannot change setting - no settings password configured. "
+                "Configure password in integration options to enable changes.",
+                self._attr_name
+            )
+            self.hass.components.persistent_notification.create(
+                f"Cannot change {self._attr_name} - settings password not configured. "
+                "Configure password in integration options to enable changes.",
+                title="Bayrol Pool Settings",
+                notification_id=f"bayrol_settings_{self._attr_name}"
+            )
+            return
+
+        # Don't retry if access previously failed
+        if self._access_failed:
+            _LOGGER.warning(
+                "%s: Cannot change setting - access previously denied. "
+                "Use the retry button or update password in integration options.",
+                self._attr_name
+            )
+            self.hass.components.persistent_notification.create(
+                f"Cannot change {self._attr_name} - settings password not accepted. "
+                "Use the retry button or update password in integration options.",
+                title="Bayrol Pool Settings",
+                notification_id=f"bayrol_settings_{self._attr_name}"
+            )
+            return
+
         try:
             # Get access using the settings password
             _LOGGER.debug("Getting controller access for %s...", self._attr_name)
             access_granted = await self._api.get_controller_access(self._cid, self._settings_password)
             
             if not access_granted:
-                _LOGGER.error(
-                    "Failed to get controller access for %s. Please verify the settings password in the integration options.",
+                self._access_failed = True
+                self._last_error = "Invalid password"
+                self.async_write_ha_state()
+                _LOGGER.warning(
+                    "%s: Cannot change setting - settings password not accepted. "
+                    "Use the retry button or update password in integration options.",
                     self._attr_name
                 )
-                # Try setting the password first
-                if not await self._api.set_controller_password(self._cid, self._settings_password):
-                    _LOGGER.error("Failed to set controller password for %s", self._attr_name)
-                    return
-                
-                # Try getting access again
-                access_granted = await self._api.get_controller_access(self._cid, self._settings_password)
-                if not access_granted:
-                    _LOGGER.error("Still failed to get controller access for %s", self._attr_name)
-                    return
+                return
 
             _LOGGER.debug("Controller access granted for %s", self._attr_name)
 
@@ -193,6 +311,11 @@ class BayrolSettingSelect(BayrolEntity, SelectEntity):
             # Set the items
             if not await self._api.set_items(self._cid, items):
                 _LOGGER.error("Failed to set %s value", self._attr_name)
+                self.hass.components.persistent_notification.create(
+                    f"Failed to set {self._attr_name} value. Please try again.",
+                    title="Bayrol Pool Settings",
+                    notification_id=f"bayrol_settings_{self._attr_name}"
+                )
                 return
 
             _LOGGER.debug("Successfully set %s value", self._attr_name)
@@ -238,11 +361,15 @@ class BayrolSettingSelect(BayrolEntity, SelectEntity):
                     await asyncio.sleep(1)
             
             _LOGGER.warning("%s: Failed to verify change to %s after 10 seconds", self._attr_name, option)
+            self.hass.components.persistent_notification.create(
+                f"Failed to verify {self._attr_name} change to {option}. The change may not have been applied.",
+                title="Bayrol Pool Settings",
+                notification_id=f"bayrol_settings_{self._attr_name}"
+            )
 
         except Exception as err:
             _LOGGER.error(
-                "Error setting %s value: %s (settings_password: %s)",
+                "Error setting %s value: %s",
                 self._attr_name,
-                err,
-                self._settings_password
+                err
             )

@@ -24,6 +24,7 @@ from homeassistant.helpers.update_coordinator import (
 )
 
 from .client.bayrol_api import BayrolPoolAPI
+from .client.device_parser import parse_device_status
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -110,10 +111,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         data = await api.get_data(entry.data[CONF_CID])
                         
                         if data:
-                            # Get device status data
-                            device_status = await api.get_device_status(entry.data[CONF_CID])
-                            if device_status:
-                                data["device_status"] = device_status
+                            # Get and parse device status data
+                            try:
+                                device_status = await api.get_device_status(entry.data[CONF_CID], raw=True)
+                                if device_status:
+                                    parsed_status = parse_device_status(device_status)
+                                    if parsed_status:
+                                        data["device_status"] = parsed_status
+                                        _LOGGER.debug("Device status parsed successfully: %s", parsed_status)
+                                    else:
+                                        _LOGGER.warning("Failed to parse device status data")
+                            except Exception as err:
+                                _LOGGER.warning("Error getting device status: %s", err)
                             
                             _LOGGER.debug("Data fetch successful: %s", data)
                             return data
@@ -124,24 +133,32 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                             # Try getting data again after successful login
                             data = await api.get_data(entry.data[CONF_CID])
                             if data:
-                                # Get device status data
-                                device_status = await api.get_device_status(entry.data[CONF_CID])
-                                if device_status:
-                                    # Compare with previous device status to see what changed
-                                    if coordinator.data and "device_status" in coordinator.data:
-                                        old_status = coordinator.data["device_status"]
-                                        for device_id, new_state in device_status.items():
-                                            if device_id in old_status:
-                                                old_state = old_status[device_id]
-                                                if old_state.get("current_value") != new_state.get("current_value"):
-                                                    _LOGGER.debug(
-                                                        "Device %s state changed: %s -> %s",
-                                                        device_id,
-                                                        old_state.get("current_text"),
-                                                        new_state.get("current_text")
-                                                    )
-                                    
-                                    data["device_status"] = device_status
+                                # Get and parse device status data
+                                try:
+                                    device_status = await api.get_device_status(entry.data[CONF_CID], raw=True)
+                                    if device_status:
+                                        parsed_status = parse_device_status(device_status)
+                                        if parsed_status:
+                                            # Compare with previous device status to see what changed
+                                            if coordinator.data and "device_status" in coordinator.data:
+                                                old_status = coordinator.data["device_status"]
+                                                for device_id, new_state in parsed_status.items():
+                                                    if device_id in old_status:
+                                                        old_state = old_status[device_id]
+                                                        if old_state.get("current_value") != new_state.get("current_value"):
+                                                            _LOGGER.debug(
+                                                                "Device %s state changed: %s -> %s",
+                                                                device_id,
+                                                                old_state.get("current_text"),
+                                                                new_state.get("current_text")
+                                                            )
+                                            
+                                            data["device_status"] = parsed_status
+                                            _LOGGER.debug("Device status parsed successfully: %s", parsed_status)
+                                        else:
+                                            _LOGGER.warning("Failed to parse device status data")
+                                except Exception as err:
+                                    _LOGGER.warning("Error getting device status: %s", err)
                                 
                                 _LOGGER.debug("Data fetch successful: %s", data)
                                 return data
