@@ -25,6 +25,7 @@ from homeassistant.helpers.update_coordinator import (
 
 from .client.bayrol_api import BayrolPoolAPI
 from .client.device_parser import parse_device_status
+from .const import DEFAULT_REFRESH_INTERVAL
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -45,8 +46,6 @@ CONFIG_SCHEMA = vol.Schema(
     },
     extra=vol.ALLOW_EXTRA,
 )
-
-SCAN_INTERVAL = timedelta(minutes=5)
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Set up the Bayrol Pool component."""
@@ -181,12 +180,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         except Exception as err:
             raise UpdateFailed(f"Error communicating with API: {err}")
 
+    # Get refresh interval from config entry or use default
+    refresh_interval = entry.data.get("refresh_interval", DEFAULT_REFRESH_INTERVAL)
+    
     coordinator = DataUpdateCoordinator(
         hass,
         _LOGGER,
         name=DOMAIN,
         update_method=async_update_data,
-        update_interval=SCAN_INTERVAL,
+        update_interval=timedelta(seconds=refresh_interval),
     )
 
     # Do first refresh to verify everything works

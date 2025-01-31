@@ -28,7 +28,8 @@
                 "title": "Configure Bayrol Pool Controller",
                 "description": "Configure the settings password to enable changing settings. Leave empty to disable settings changes (values will still be displayed).",
                 "data": {
-                    "settings_password": "[Optional] Settings Password - required only if you want to change settings"
+                    "settings_password": "[Optional] Settings Password - required only if you want to change settings",
+                    "refresh_interval": "Refresh interval in seconds (minimum 30)"
                 }
             }
         },

@@ -16,7 +16,11 @@ from homeassistant.const import CONF_USERNAME, CONF_PASSWORD
 
 from . import DOMAIN, CONF_CID
 from .client.bayrol_api import BayrolPoolAPI
-from .const import CONF_SETTINGS_PASSWORD
+from .const import (
+    CONF_SETTINGS_PASSWORD,
+    MIN_REFRESH_INTERVAL,
+    DEFAULT_REFRESH_INTERVAL,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -25,6 +29,10 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Required(CONF_USERNAME): str,
         vol.Required(CONF_PASSWORD): str,
         vol.Optional(CONF_SETTINGS_PASSWORD): str,
+        vol.Optional("refresh_interval", default=DEFAULT_REFRESH_INTERVAL): vol.All(
+            vol.Coerce(int),
+            vol.Range(min=MIN_REFRESH_INTERVAL)
+        ),
     }
 )
 
@@ -210,9 +218,15 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             
             user_input[CONF_SETTINGS_PASSWORD] = settings_password
 
+            # Validate refresh interval
+            refresh_interval = user_input.get("refresh_interval", DEFAULT_REFRESH_INTERVAL)
+            if refresh_interval < MIN_REFRESH_INTERVAL:
+                refresh_interval = MIN_REFRESH_INTERVAL
+
             # Update the config entry with the new settings
             new_data = {**self.config_entry.data}
             new_data[CONF_SETTINGS_PASSWORD] = user_input.get(CONF_SETTINGS_PASSWORD)
+            new_data["refresh_interval"] = refresh_interval
             self.hass.config_entries.async_update_entry(
                 self.config_entry,
                 data=new_data
@@ -230,6 +244,13 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     CONF_SETTINGS_PASSWORD,
                     description={"suggested_value": self.config_entry.data.get(CONF_SETTINGS_PASSWORD)}
                 ): str,
+                vol.Optional(
+                    "refresh_interval",
+                    default=self.config_entry.data.get("refresh_interval", DEFAULT_REFRESH_INTERVAL)
+                ): vol.All(
+                    vol.Coerce(int),
+                    vol.Range(min=MIN_REFRESH_INTERVAL)
+                ),
             }),
         )
 
