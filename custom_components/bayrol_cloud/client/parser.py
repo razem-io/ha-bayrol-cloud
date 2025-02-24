@@ -151,7 +151,8 @@ def parse_pool_data(html: str) -> Dict[str, Any]:
         'Redox': 'mV',
         'Temp.': 'T',
         'mV': 'mV',
-        'T': 'T'
+        'T': 'T',
+        'T1': 'T'
     }
     
     for box in boxes:
@@ -162,7 +163,7 @@ def parse_pool_data(html: str) -> Dict[str, Any]:
             label_text = span.text.strip()
             label_match = re.match(r'^([^[]+)', label_text)
             if label_match:
-                raw_label = label_match.group(1).strip()
+                raw_label = label_match.group(1).replace('\xa0', ' ').strip()
                 # Map the raw label to standardized key
                 label = measurement_map.get(raw_label)
                 if label:

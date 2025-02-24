@@ -185,5 +185,31 @@ def test_check_login_error():
     html_with_error = """<div class="error_text">Fehler: Invalid credentials</div>"""
     assert check_login_error(html_with_error) is True
 
+def test_parse_pool_data_pm5():
+    """Test parsing pool data from PM5 device with T1 temperature sensor."""
+    PM5_HTML = """<div><div class="gapp_pm5" onclick="gotoapp(12345)"><span>App Link<span></div>
+<div class="tab_data_link" onclick="document.location.href='device.php?c=12345'">
+    <div class="gstat_ok"></div>
+    <div class="tab_box stat_ok"><span>pH&nbsp;[pH]</span><h1>7.15</h1></div>
+    <div class="tab_box stat_ok"><span>mV&nbsp;[mV]</span><h1>831</h1></div>
+    <div class="tab_box stat_warning"><span>T1&nbsp;[°C]</span><h1>11.3</h1></div>
+    <div class="tab_box "></div>
+    <div class="tab_info">
+        <span>SOMESERIAL</span></br>
+        <span>PoolManager Chlor (Cl)</span></br>
+        <span>v240404 (9.0.1)</span></br>
+        <span><a href="device.php?c=12345">Direktzugriff</a></div>
+</div></div>"""
+    data = parse_pool_data(PM5_HTML)
+    assert data == {
+        "pH": 7.15,
+        "mV": 831.0,
+        "T": 11.3,
+        "status": "online",
+        "pH_alarm": False,
+        "mV_alarm": False,
+        "T_alarm": True
+    }
+
     html_without_error = """<div>Welcome!</div>"""
     assert check_login_error(html_without_error) is False
