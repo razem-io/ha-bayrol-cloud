@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+
 import re
 from typing import Any
 
@@ -16,7 +17,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import DOMAIN, CONF_CID
 from .const import CONF_SETTINGS_PASSWORD
-from .helpers import BayrolEntity, get_device_icon
+from .helpers import BayrolEntity, get_device_icon, conditional_log
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -63,7 +64,21 @@ async def async_setup_entry(
                 # Extract the item number from the full item class (e.g., "item3_153" -> "3.153")
                 # This is the number from the select element, not the display element
                 item_number = sensor_data["item_number"].replace("item", "").replace("_", ".")
-                _LOGGER.debug("Creating select for %s with item number %s", sensor_data["name"], item_number)
+                
+                # Check if this is a sensor from a specific tab (controller) by checking for tab prefix
+                controller_prefix = ""
+                tab_match = re.match(r'tab_(\d+)_(.+)', sensor_id)
+                if tab_match:
+                    tab_number = tab_match.group(1)
+                    original_sensor_id = tab_match.group(2)
+                    controller_prefix = f"Controller {tab_number}: "
+                else:
+                    original_sensor_id = sensor_id
+                
+                # Create display name - just use the device name without operation name (Betriebsart)
+                display_name = f"{controller_prefix}{sensor_data['name']}"
+                
+                conditional_log(_LOGGER, logging.DEBUG, "Creating select for %s with item number %s", display_name, item_number, debug_mode=api.debug_mode)
                 
                 selects.append(
                     BayrolSettingSelect(
@@ -72,9 +87,10 @@ async def async_setup_entry(
                         entry,
                         sensor_id,
                         item_number,
-                        sensor_data["name"],
+                        display_name,
                         sensor_data["options"],
                         settings_password,
+                        original_sensor_id,
                     )
                 )
             except Exception as err:
@@ -95,6 +111,7 @@ class BayrolSettingSelect(BayrolEntity, SelectEntity):
         name: str,
         options: list[dict],
         settings_password: str,
+        original_sensor_id: str = None,
     ) -> None:
         """Initialize the select."""
         super().__init__(coordinator, entry, sensor_id, name)
@@ -106,6 +123,8 @@ class BayrolSettingSelect(BayrolEntity, SelectEntity):
         self._options = options
         self._access_failed = False
         self._last_error = None
+        # Store original sensor ID for controllers with tab prefixes
+        self._original_sensor_id = original_sensor_id or sensor_id
         
         # Map option values to their text representations
         self._value_to_text = {str(opt["value"]): opt["text"] for opt in options}
@@ -176,15 +195,13 @@ class BayrolSettingSelect(BayrolEntity, SelectEntity):
                 if device_data:
                     current_value = str(device_data.get("current_value"))
                     current_option = self._value_to_text.get(current_value)
-                    _LOGGER.debug(
-                        "%s: State updated by coordinator: value=%s, option=%s, available=%s",
+                    conditional_log(_LOGGER, logging.DEBUG, "%s: State updated by coordinator: value=%s, option=%s, available=%s",
                         self._attr_name,
                         current_value,
                         current_option,
-                        self.available
-                    )
+                        self.available, debug_mode=self._api.debug_mode)
                 else:
-                    _LOGGER.debug("%s: No device data in update", self._attr_name)
+                    conditional_log(_LOGGER, logging.DEBUG, "%s: No device data in update", self._attr_name, debug_mode=self._api.debug_mode)
                 
             # Always write state to ensure entity stays registered
             self.async_write_ha_state()
@@ -198,23 +215,23 @@ class BayrolSettingSelect(BayrolEntity, SelectEntity):
         """Return the current option."""
         try:
             if not self.coordinator.data:
-                _LOGGER.debug("%s: No coordinator data", self._attr_name)
+                conditional_log(_LOGGER, logging.DEBUG, "%s: No coordinator data", self._attr_name, debug_mode=self._api.debug_mode)
                 return None
                 
             device_status = self.coordinator.data.get("device_status", {})
             if not device_status:
-                _LOGGER.debug("%s: No device status data", self._attr_name)
+                conditional_log(_LOGGER, logging.DEBUG, "%s: No device status data", self._attr_name, debug_mode=self._api.debug_mode)
                 return None
                 
             device_data = device_status.get(self._sensor_id)
             if not device_data:
-                _LOGGER.debug("%s: No device data", self._attr_name)
+                conditional_log(_LOGGER, logging.DEBUG, "%s: No device data", self._attr_name, debug_mode=self._api.debug_mode)
                 return None
                 
             current_value = str(device_data.get("current_value"))
             current_option = self._value_to_text.get(current_value)
-            _LOGGER.debug("%s: Current value: %s, Current option: %s, Available options: %s", 
-                         self._attr_name, current_value, current_option, self._attr_options)
+            conditional_log(_LOGGER, logging.DEBUG, "%s: Current value: %s, Current option: %s, Available options: %s", 
+                         self._attr_name, current_value, current_option, self._attr_options, debug_mode=self._api.debug_mode)
             return current_option
             
         except Exception as err:
@@ -228,11 +245,11 @@ class BayrolSettingSelect(BayrolEntity, SelectEntity):
 
     async def async_select_option(self, option: str) -> None:
         """Change the selected option."""
-        _LOGGER.debug(
-            "%s: async_select_option called with option: %s (current option: %s)",
+        conditional_log(_LOGGER, logging.DEBUG, "%s: async_select_option called with option: %s (current option: %s)",
             self._attr_name,
             option,
-            self.current_option
+            self.current_option,
+            debug_mode=self._api.debug_mode
         )
 
         # Check if settings password is configured
@@ -267,7 +284,7 @@ class BayrolSettingSelect(BayrolEntity, SelectEntity):
 
         try:
             # Get access using the settings password
-            _LOGGER.debug("Getting controller access for %s...", self._attr_name)
+            conditional_log(_LOGGER, logging.DEBUG, "Getting controller access for %s...", self._attr_name, debug_mode=self._api.debug_mode)
             access_granted = await self._api.get_controller_access(self._cid, self._settings_password)
             
             if not access_granted:
@@ -281,16 +298,35 @@ class BayrolSettingSelect(BayrolEntity, SelectEntity):
                 )
                 return
 
-            _LOGGER.debug("Controller access granted for %s", self._attr_name)
+            conditional_log(_LOGGER, logging.DEBUG, "Controller access granted for %s", self._attr_name, debug_mode=self._api.debug_mode)
 
             # Get the value to set from our mapping
+            if option not in self._text_to_value:
+                _LOGGER.error("Option %s not found in available options: %s", option, self._text_to_value.keys())
+                self.hass.components.persistent_notification.create(
+                    f"Failed to set {self._attr_name}: option '{option}' not available.",
+                    title="Bayrol Pool Settings",
+                    notification_id=f"bayrol_settings_{self._attr_name}"
+                )
+                return
+                
             value = self._text_to_value[option]
             
             # Create value list with 1 at the position corresponding to the selected value
             # For example, for Filterpumpe setting to Eco (value 1):
             # [0, 1, 0, 0, 0]
             value_list = [0] * len(self._options)  # Create list of zeros with length equal to number of options
-            value_list[value] = 1  # Set 1 at the position corresponding to the selected value
+            
+            try:
+                value_list[value] = 1  # Set 1 at the position corresponding to the selected value
+            except IndexError:
+                _LOGGER.error("Value %s out of range for options list of length %d", value, len(self._options))
+                self.hass.components.persistent_notification.create(
+                    f"Failed to set {self._attr_name}: value out of range.",
+                    title="Bayrol Pool Settings",
+                    notification_id=f"bayrol_settings_{self._attr_name}"
+                )
+                return
             
             items = [{
                 "topic": self._item_number,
@@ -300,12 +336,12 @@ class BayrolSettingSelect(BayrolEntity, SelectEntity):
                 "cmd": 0
             }]
 
-            _LOGGER.debug(
-                "Setting %s to %s (value: %s, list: %s)",
+            conditional_log(_LOGGER, logging.DEBUG, "Setting %s to %s (value: %s, list: %s)",
                 self._attr_name,
                 option,
                 value,
-                value_list
+                value_list,
+                debug_mode=self._api.debug_mode
             )
 
             # Set the items
@@ -318,14 +354,14 @@ class BayrolSettingSelect(BayrolEntity, SelectEntity):
                 )
                 return
 
-            _LOGGER.debug("Successfully set %s value", self._attr_name)
+            conditional_log(_LOGGER, logging.DEBUG, "Successfully set %s value", self._attr_name, debug_mode=self._api.debug_mode)
 
             # Wait a bit before starting verification
-            _LOGGER.debug("%s: Waiting 2 seconds before starting verification...", self._attr_name)
+            conditional_log(_LOGGER, logging.DEBUG, "%s: Waiting 2 seconds before starting verification...", self._attr_name, debug_mode=self._api.debug_mode)
             await asyncio.sleep(2)
 
             # Try for up to 10 seconds to verify the change
-            _LOGGER.debug("%s: Verifying change (will retry for 10 seconds)...", self._attr_name)
+            conditional_log(_LOGGER, logging.DEBUG, "Verifying change (will retry for 10 seconds)", debug_mode=self._api.debug_mode)
             for retry in range(10):
                 # Get the device status page directly to verify
                 http_client = self._api._client
@@ -339,25 +375,23 @@ class BayrolSettingSelect(BayrolEntity, SelectEntity):
                         select_match = re.search(f'item{self._item_number.replace(".", "_")}.*?<select.*?>(.*?)</select>', html, re.DOTALL)
                         if select_match:
                             select_html = select_match.group(1)
-                            _LOGGER.debug(
-                                "%s: Attempt %d - Current HTML: %s",
+                            conditional_log(_LOGGER, logging.DEBUG, "%s: Attempt %d - Current HTML: %s",
                                 self._attr_name,
                                 retry + 1,
-                                select_html
-                            )
+                                select_html, debug_mode=self._api.debug_mode)
                             
                             # Check if either the value or text indicates the change
                             value_changed = f'value="{value}" selected' in select_html
                             text_changed = f'>{option}<' in select_html
                             
                             if value_changed or text_changed:
-                                _LOGGER.debug("%s: Verified change (value_changed=%s, text_changed=%s)", 
-                                            self._attr_name, value_changed, text_changed)
+                                conditional_log(_LOGGER, logging.DEBUG, "%s: Verified change (value_changed=%s, text_changed=%s)",
+                                            self._attr_name, value_changed, text_changed, debug_mode=self._api.debug_mode)
                                 # Now refresh coordinator to update all entities
                                 await self.coordinator.async_request_refresh()
                                 return
                     
-                    _LOGGER.debug("%s: Not yet set to %s, waiting 1 second...", self._attr_name, option)
+                    conditional_log(_LOGGER, logging.DEBUG, "%s: Not yet set to %s, waiting 1 second...", self._attr_name, option, debug_mode=self._api.debug_mode)
                     await asyncio.sleep(1)
             
             _LOGGER.warning("%s: Failed to verify change to %s after 10 seconds", self._attr_name, option)

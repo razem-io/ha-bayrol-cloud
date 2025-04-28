@@ -1,5 +1,7 @@
 """Parser utilities for Bayrol Pool API responses."""
 import logging
+
+from ..helpers import conditional_log
 import re
 from typing import Any, Dict, List, Optional, Tuple
 from bs4 import BeautifulSoup
@@ -7,9 +9,9 @@ from datetime import datetime
 
 _LOGGER = logging.getLogger(__name__)
 
-def parse_login_form(html: str) -> Dict[str, str]:
+def parse_login_form(html: str, debug: bool = False) -> Dict[str, str]:
     """Parse login form and extract all form fields."""
-    _LOGGER.debug("Attempting to parse login form")
+    conditional_log(_LOGGER, logging.DEBUG, "Attempting to parse login form", debug_mode=debug)
     soup = BeautifulSoup(html, 'html.parser')
     form = soup.find('form', {'id': 'form_login'})
     
@@ -24,14 +26,14 @@ def parse_login_form(html: str) -> Dict[str, str]:
         value = input_field.get('value', '')
         if name:
             form_data[name] = value
-            _LOGGER.debug("Found form field: %s", name)
+            conditional_log(_LOGGER, logging.DEBUG, "Found form field: %s", name, debug_mode=debug)
             
-    _LOGGER.debug("Successfully parsed login form with fields: %s", list(form_data.keys()))
+    conditional_log(_LOGGER, logging.DEBUG, "Successfully parsed login form with fields: %s", list(form_data.keys()), debug_mode=debug)
     return form_data
 
-def check_login_error(html: str) -> bool:
+def check_login_error(html: str, debug: bool = False) -> bool:
     """Check if login response contains error messages."""
-    _LOGGER.debug("Checking for login errors")
+    conditional_log(_LOGGER, logging.DEBUG, "Checking for login errors", debug_mode=debug)
     if "Fehler" in html or "Zeit abgelaufen" in html:
         soup = BeautifulSoup(html, 'html.parser')
         error = soup.find('div', class_='error_text')
@@ -43,45 +45,70 @@ def check_login_error(html: str) -> bool:
         return True
     return False
 
-def parse_controllers(html: str) -> List[Dict[str, str]]:
+def parse_controllers(html: str, debug: bool = False) -> List[Dict[str, str]]:
     """Parse controllers from plants page HTML."""
-    _LOGGER.debug("Starting to parse controllers from HTML")
+    conditional_log(_LOGGER, logging.DEBUG, "Starting to parse controllers from HTML", debug_mode=debug)
     soup = BeautifulSoup(html, 'html.parser')
     controllers = []
     
-    # Find all divs that contain controller information
-    controller_divs = soup.find_all('div', onclick=re.compile(r'plant_settings\.php\?c=\d+'))
-    if not controller_divs:
-        _LOGGER.error("No controller divs found in HTML")
+    # Find all tab_row divs, each containing a separate controller
+    tab_rows = soup.find_all('div', class_='tab_row')
+    if not tab_rows:
+        _LOGGER.error("No tab_row divs found in HTML")
         return controllers
 
-    for div in controller_divs:
-        # Extract CID from onclick attribute
-        onclick = div.get('onclick', '')
-        cid_match = re.search(r'c=(\d+)', onclick)
-        if cid_match:
-            cid = cid_match.group(1)
-            
-            # Try to find the controller name in nearby elements
-            name_div = div.find_next('div', class_='tab_info')
-            name = "Pool Controller"
-            if name_div:
-                spans = name_div.find_all('span')
+    for tab_row in tab_rows:
+        # Find the tab_1 div containing controller info
+        tab_1 = tab_row.find('div', class_='tab_1')
+        # Find the tab_2 div containing controller data
+        tab_2 = tab_row.find('div', class_='tab_2')
+        
+        if not tab_1 or not tab_2:
+            _LOGGER.warning("Incomplete controller data in tab_row: missing tab_1 or tab_2")
+            continue
+        
+        # Extract controller ID from tab_2 ID or from onclick in tab_1
+        cid = None
+        # Try to get cid from tab_2 id attribute (format: tab_data{cid})
+        if 'id' in tab_2.attrs:
+            tab_id_match = re.search(r'tab_data(\d+)', tab_2.get('id', ''))
+            if tab_id_match:
+                cid = tab_id_match.group(1)
+        
+        # If we couldn't get cid from tab_2 id, try from onclick in tab_1
+        if not cid:
+            onclick_div = tab_1.find('div', onclick=re.compile(r'plant_settings\.php\?c=\d+'))
+            if onclick_div:
+                onclick = onclick_div.get('onclick', '')
+                cid_match = re.search(r'c=(\d+)', onclick)
+                if cid_match:
+                    cid = cid_match.group(1)
+        
+        if not cid:
+            _LOGGER.warning("Could not find controller ID in tab_row")
+            continue
+        
+        # Extract controller name from tab_1
+        name = "Pool Controller"
+        p_tag = tab_1.find('p')
+        if p_tag:
+            name = p_tag.text.strip()
+        
+        # If no name in p tag, try to get from tab_info in tab_2
+        if name == "Pool Controller":
+            tab_info = tab_2.find('div', class_='tab_info')
+            if tab_info:
+                spans = tab_info.find_all('span')
                 if len(spans) >= 2:
                     name = spans[1].text.strip()
-                else:
-                    _LOGGER.warning("Controller %s: Expected at least 2 spans in tab_info, found %d", 
-                                  cid, len(spans))
-            else:
-                _LOGGER.warning("Controller %s: Could not find tab_info div", cid)
-            
-            controllers.append({
-                "cid": cid,
-                "name": name
-            })
-            _LOGGER.debug("Found controller: %s (CID: %s)", name, cid)
+        
+        controllers.append({
+            "cid": cid,
+            "name": name
+        })
+        conditional_log(_LOGGER, logging.DEBUG, "Found controller: %s (CID: %s)", name, cid, debug_mode=debug)
     
-    _LOGGER.debug("Successfully parsed %d controllers", len(controllers))
+    conditional_log(_LOGGER, logging.DEBUG, "Successfully parsed %d controllers", len(controllers), debug_mode=debug)
     return controllers
 
 class DebugInfo:
@@ -99,11 +126,15 @@ class DebugInfo:
             "measurements_failed": self.measurements_failed
         }
 
-def check_device_offline(html: str) -> Optional[Dict[str, Any]]:
+def check_device_offline(html: str, debug: bool = False) -> Optional[Dict[str, Any]]:
     """Check if the device is offline and extract offline information."""
     soup = BeautifulSoup(html, 'html.parser')
-    error_div = soup.find('div', class_='tab_error')
     
+    # First check if we're looking at a device page for a specific controller
+    # or the plants overview page with multiple controllers
+    
+    # Handle device page for a specific controller
+    error_div = soup.find('div', class_='tab_error')
     if error_div and "No connection to the controller" in error_div.text:
         # Extract the last seen time
         time_match = re.search(r'since (\d{2}\.\d{2}\.\d{2}, \d{2}:\d{2}) UTC', error_div.text)
@@ -122,20 +153,56 @@ def check_device_offline(html: str) -> Optional[Dict[str, Any]]:
             "last_seen": time_match.group(1) if time_match else None
         }
         
-        _LOGGER.debug("Device is offline: %s", offline_info)
+        conditional_log(_LOGGER, logging.DEBUG, "Device is offline: %s", offline_info, debug_mode=debug)
         return offline_info
+    
+    # Handle plants overview page with potentially multiple controllers
+    # Look for tab_row divs with error indications
+    tab_rows = soup.find_all('div', class_='tab_row')
+    for tab_row in tab_rows:
+        tab_2 = tab_row.find('div', class_='tab_2')
+        if tab_2:
+            error_div = tab_2.find('div', class_='tab_error')
+            if error_div and "No connection to the controller" in error_div.text:
+                # Extract the controller ID from tab_2 id attribute
+                cid = None
+                if 'id' in tab_2.attrs:
+                    tab_id_match = re.search(r'tab_data(\d+)', tab_2.get('id', ''))
+                    if tab_id_match:
+                        cid = tab_id_match.group(1)
+                
+                # Try to get the last seen time
+                time_match = re.search(r'since (\d{2}\.\d{2}\.\d{2}, \d{2}:\d{2}) UTC', error_div.text)
+                
+                # Try to get device ID from tab_info
+                info_div = tab_2.find('div', class_='tab_info')
+                device_id = None
+                if info_div:
+                    device_span = info_div.find('span')
+                    if device_span:
+                        device_id = device_span.text.strip()
+                
+                offline_info = {
+                    "status": "offline",
+                    "cid": cid,
+                    "device_id": device_id,
+                    "last_seen": time_match.group(1) if time_match else None
+                }
+                
+                conditional_log(_LOGGER, logging.DEBUG, "Controller %s is offline: %s", cid, offline_info, debug_mode=debug)
+                return offline_info
     
     return None
 
-def parse_pool_data(html: str) -> Dict[str, Any]:
+def parse_pool_data(html: str, debug: bool = False) -> Dict[str, Any]:
     """Parse pool data from getdata response HTML."""
-    _LOGGER.debug("Starting to parse pool data")
+    conditional_log(_LOGGER, logging.DEBUG, "Starting to parse pool data", debug_mode=debug)
     soup = BeautifulSoup(html, 'html.parser')
     data = {}
     debug = DebugInfo()
     
     # First check if device is offline
-    offline_info = check_device_offline(html)
+    offline_info = check_device_offline(html, debug=debug)
     if offline_info:
         return offline_info
     
@@ -175,8 +242,8 @@ def parse_pool_data(html: str) -> Dict[str, Any]:
                         has_alarm = 'stat_warning' in box_classes or 'stat_alarm' in box_classes
                         data[f"{label}_alarm"] = has_alarm
                         debug.measurements_found.append(f"{label}: {value}")
-                        _LOGGER.debug("Successfully parsed %s: %s (alarm: %s)", 
-                                    label, value, has_alarm)
+                        conditional_log(_LOGGER, logging.DEBUG, "Successfully parsed %s: %s (alarm: %s)", 
+                                    label, value, has_alarm, debug_mode=debug)
                     except ValueError:
                         error_msg = f"Failed to convert value '{value}' to float for measurement '{label}'"
                         _LOGGER.error(error_msg)
@@ -191,10 +258,10 @@ def parse_pool_data(html: str) -> Dict[str, Any]:
         _LOGGER.error(error_msg)
         debug.parsing_errors.append(error_msg)
     else:
-        _LOGGER.debug("Successfully parsed pool data: %s", data)
+        conditional_log(_LOGGER, logging.DEBUG, "Successfully parsed pool data: %s", data, debug_mode=debug)
         data["status"] = "online"
     
     # Store debug info in the logger context for Home Assistant to access
-    _LOGGER.debug("Debug information: %s", debug.to_dict())
+    conditional_log(_LOGGER, logging.DEBUG, "Debug information: %s", debug.to_dict(), debug_mode=debug)
         
     return data

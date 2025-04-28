@@ -19,6 +19,7 @@ from .parser import (
     parse_controllers,
     parse_pool_data,
 )
+from ..helpers import conditional_log
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ class BayrolHttpClient:
         self._phpsessid: Optional[str] = None
         self._debug_mode = False
         self._last_raw_html = None
-        _LOGGER.debug("BayrolHttpClient initialized with session: %s", id(session))
+        conditional_log(_LOGGER, logging.DEBUG, "BayrolHttpClient initialized with session: %s", id(session), debug_mode=self._debug_mode)
 
     @property
     def debug_mode(self) -> bool:
@@ -60,7 +61,7 @@ class BayrolHttpClient:
         if additional_headers:
             headers.update(additional_headers)
             
-        _LOGGER.debug("Generated headers: %s", headers)
+        conditional_log(_LOGGER, logging.DEBUG, "Generated headers: %s", headers, debug_mode=self._debug_mode)
         return headers
 
     def _extract_phpsessid(self, response: aiohttp.ClientResponse) -> Optional[str]:
@@ -74,7 +75,7 @@ class BayrolHttpClient:
         # If no PHPSESSID in cookies, try to get it from Set-Cookie header
         if 'Set-Cookie' in response.headers:
             cookie_header = response.headers['Set-Cookie']
-            _LOGGER.debug("Set-Cookie header: %s", cookie_header)
+            conditional_log(_LOGGER, logging.DEBUG, "Set-Cookie header: %s", cookie_header, debug_mode=self._debug_mode)
             match = re.search(r'PHPSESSID=([^;]+)', cookie_header)
             if match:
                 return match.group(1)
@@ -85,7 +86,7 @@ class BayrolHttpClient:
         """Login to Bayrol Pool Access."""
         try:
             # First get the login page and extract form data
-            _LOGGER.debug("Initializing session...")
+            conditional_log(_LOGGER, logging.DEBUG, "Initializing session...", debug_mode=self._debug_mode)
             init_url = f"{BASE_URL}/m/login.php"
             
             # Clear any existing cookies
@@ -100,9 +101,9 @@ class BayrolHttpClient:
                 "Sec-Fetch-Site": "none",
             })
             
-            _LOGGER.debug("Making initial GET request to %s", init_url)
+            conditional_log(_LOGGER, logging.DEBUG, "Making initial GET request to %s", init_url, debug_mode=self._debug_mode)
             async with self._session.get(init_url, headers=init_headers, allow_redirects=True) as response:
-                _LOGGER.debug("Initial response status: %s", response.status)
+                conditional_log(_LOGGER, logging.DEBUG, "Initial response status: %s", response.status, debug_mode=self._debug_mode)
                 html = await response.text()
                 
                 phpsessid = self._extract_phpsessid(response)
@@ -111,7 +112,7 @@ class BayrolHttpClient:
                     return False
 
                 self._phpsessid = phpsessid
-                _LOGGER.debug("Got session ID: %s", self._phpsessid)
+                conditional_log(_LOGGER, logging.DEBUG, "Got session ID: %s", self._phpsessid, debug_mode=self._debug_mode)
 
                 # Extract form data and add credentials
                 form_data = parse_login_form(html)
@@ -122,19 +123,19 @@ class BayrolHttpClient:
                 form_data['password'] = password
 
             # Try to login with the complete form data
-            _LOGGER.debug("Attempting login POST request...")
+            conditional_log(_LOGGER, logging.DEBUG, "Attempting login POST request...", debug_mode=self._debug_mode)
             login_url = f"{BASE_URL}/m/login.php?r=reg"
             login_headers = self._get_headers(LOGIN_HEADERS)
             login_headers["Referer"] = f"{BASE_URL}/m/login.php"
 
             async with self._session.post(login_url, headers=login_headers, data=form_data, allow_redirects=True) as response:
-                _LOGGER.debug("Login response status: %s", response.status)
+                conditional_log(_LOGGER, logging.DEBUG, "Login response status: %s", response.status, debug_mode=self._debug_mode)
                 content = await response.text()
                 
                 if check_login_error(content):
                     return False
                 
-                _LOGGER.debug("Login successful")
+                conditional_log(_LOGGER, logging.DEBUG, "Login successful", debug_mode=self._debug_mode)
                 return True
 
         except Exception as err:
@@ -151,9 +152,9 @@ class BayrolHttpClient:
         headers = self._get_headers(CONTROLLERS_HEADERS)
 
         try:
-            _LOGGER.debug("Getting controllers from %s", url)
+            conditional_log(_LOGGER, logging.DEBUG, "Getting controllers from %s", url, debug_mode=self._debug_mode)
             async with self._session.get(url, headers=headers) as response:
-                _LOGGER.debug("Get controllers response status: %s", response.status)
+                conditional_log(_LOGGER, logging.DEBUG, "Get controllers response status: %s", response.status, debug_mode=self._debug_mode)
                 html = await response.text()
                 if self._debug_mode:
                     self._last_raw_html = html
@@ -174,15 +175,55 @@ class BayrolHttpClient:
             headers = self._get_headers()
             headers["Referer"] = f"{BASE_URL}/m/plants.php"
 
-            _LOGGER.debug("Getting device status from %s", url)
+            conditional_log(_LOGGER, logging.DEBUG, "Getting device status from %s", url, debug_mode=self._debug_mode)
             async with self._session.get(url, headers=headers) as response:
-                _LOGGER.debug("Get device status response status: %s", response.status)
+                conditional_log(_LOGGER, logging.DEBUG, "Get device status response status: %s", response.status, debug_mode=self._debug_mode)
                 
                 if response.status != 200:
                     _LOGGER.error("Device status fetch failed with status: %s", response.status)
+                    response_headers = dict(response.headers)
+                    conditional_log(_LOGGER, logging.DEBUG, "Response headers: %s", response_headers, debug_mode=self._debug_mode)
+                    
+                    # Try to get some response content even on error
+                    try:
+                        error_content = await response.text()
+                        error_preview = error_content[:200] + "..." if len(error_content) > 200 else error_content
+                        conditional_log(_LOGGER, logging.DEBUG, "Error response content preview: %s", error_preview, debug_mode=self._debug_mode)
+                    except Exception as read_err:
+                        conditional_log(_LOGGER, logging.DEBUG, "Could not read error response content: %s", read_err, debug_mode=self._debug_mode)
+                    
                     return ""
                 
                 html = await response.text()
+                
+                # Add detailed logging
+                content_length = len(html)
+                conditional_log(_LOGGER, logging.DEBUG, "Device status response content length: %d bytes", content_length, debug_mode=self._debug_mode)
+                
+                if content_length == 0:
+                    _LOGGER.warning("Empty device status response received")
+                    return ""
+                    
+                if content_length < 200:
+                    # If very small, log the entire content
+                    conditional_log(_LOGGER, logging.DEBUG, "Small device status response: %s", html, debug_mode=self._debug_mode)
+                else:
+                    # Log a preview of the content
+                    conditional_log(_LOGGER, logging.DEBUG, "Device status response preview: %s...", html[:200], debug_mode=self._debug_mode)
+                    
+                    # Check for key HTML elements to help diagnose problems
+                    has_html_tag = "<html" in html.lower()
+                    has_body_tag = "<body" in html.lower()
+                    has_tab_class = "tab_" in html
+                    has_device_divs = 'class="i_x16"' in html
+                    has_i_item_divs = 'class="i_item"' in html
+                    
+                    conditional_log(_LOGGER, logging.DEBUG,
+                        "HTML structure check: html_tag=%s, body_tag=%s, tab_class=%s, device_divs=%s, i_item_divs=%s",
+                        has_html_tag, has_body_tag, has_tab_class, has_device_divs, has_i_item_divs,
+                        debug_mode=self._debug_mode
+                    )
+                
                 if self._debug_mode:
                     self._last_raw_html = html
                 return html
@@ -202,9 +243,9 @@ class BayrolHttpClient:
             headers = self._get_headers(DATA_HEADERS)
             headers["Referer"] = f"{BASE_URL}/m/plants.php"
 
-            _LOGGER.debug("Getting data from %s", url)
+            conditional_log(_LOGGER, logging.DEBUG, "Getting data from %s", url, debug_mode=self._debug_mode)
             async with self._session.get(url, headers=headers) as response:
-                _LOGGER.debug("Get data response status: %s", response.status)
+                conditional_log(_LOGGER, logging.DEBUG, "Get data response status: %s", response.status, debug_mode=self._debug_mode)
                 
                 if response.status != 200:
                     _LOGGER.error("Data fetch failed with status: %s", response.status)
@@ -238,7 +279,7 @@ class BayrolHttpClient:
                 }
             }
 
-            _LOGGER.debug("Setting controller password...")
+            conditional_log(_LOGGER, logging.DEBUG, "Setting controller password...", debug_mode=self._debug_mode)
             async with self._session.post(url, headers=headers, json=data) as response:
                 if response.status != 200:
                     _LOGGER.error("Failed to set controller password: %s", response.status)
@@ -259,7 +300,7 @@ class BayrolHttpClient:
 
         try:
             # First get the main device page
-            _LOGGER.debug("Accessing main device page...")
+            conditional_log(_LOGGER, logging.DEBUG, "Accessing main device page...", debug_mode=self._debug_mode)
             main_url = f"{BASE_URL}/p/device.php?c={cid}"
             headers = self._get_headers()
             headers["Referer"] = f"{BASE_URL}/m/plants.php"
@@ -269,7 +310,7 @@ class BayrolHttpClient:
                     _LOGGER.error("Failed to access main device page: %s", response.status)
                     return False
                 
-                _LOGGER.debug("Successfully accessed main device page")
+                conditional_log(_LOGGER, logging.DEBUG, "Successfully accessed main device page", debug_mode=self._debug_mode)
 
             # Now submit the device password
             url = f"{BASE_URL}/data_json.php"
@@ -285,7 +326,7 @@ class BayrolHttpClient:
                 }
             }
 
-            _LOGGER.debug("Setting controller password...")
+            conditional_log(_LOGGER, logging.DEBUG, "Setting controller password...", debug_mode=self._debug_mode)
             async with self._session.post(url, headers=headers, json=set_code_data) as response:
                 if response.status != 200:
                     _LOGGER.error("Failed to set controller password: %s", response.status)
@@ -296,7 +337,7 @@ class BayrolHttpClient:
                     _LOGGER.error("Failed to set controller password")
                     return False
 
-                _LOGGER.debug("Successfully set controller password")
+                conditional_log(_LOGGER, logging.DEBUG, "Successfully set controller password", debug_mode=self._debug_mode)
 
             # Then get access
             get_access_data = {
@@ -307,7 +348,7 @@ class BayrolHttpClient:
                 }
             }
 
-            _LOGGER.debug("Getting controller access...")
+            conditional_log(_LOGGER, logging.DEBUG, "Getting controller access...", debug_mode=self._debug_mode)
             async with self._session.post(url, headers=headers, json=get_access_data) as response:
                 if response.status != 200:
                     _LOGGER.error("Failed to get controller access: %s", response.status)
@@ -318,7 +359,7 @@ class BayrolHttpClient:
                     _LOGGER.error("Controller password not accepted")
                     return False
 
-                _LOGGER.debug("Controller access granted")
+                conditional_log(_LOGGER, logging.DEBUG, "Controller access granted", debug_mode=self._debug_mode)
                 return True
 
         except Exception as err:
@@ -344,7 +385,7 @@ class BayrolHttpClient:
                 }
             }
 
-            _LOGGER.debug("Setting items: %s", items)
+            conditional_log(_LOGGER, logging.DEBUG, "Setting items: %s", items, debug_mode=self._debug_mode)
             async with self._session.post(url, headers=headers, json=data) as response:
                 if response.status != 200:
                     _LOGGER.error("Failed to set items: %s", response.status)

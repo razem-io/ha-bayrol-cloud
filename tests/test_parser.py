@@ -157,10 +157,19 @@ def test_debug_info_partial_data(caplog):
 
 def test_parse_controllers():
     """Test parsing controllers from plants page."""
-    html = """<div onclick="document.location.href='plant_settings.php?c=12345'">
-        <div class="tab_info">
-            <span>Device ID</span>
-            <span>Pool Controller 1</span>
+    html = """<div class="tab_row">
+        <div class="tab_1">
+            <div style="float:left;" onclick="document.location.href='plant_settings.php?c=12345'" title="Edit controller data">
+                <p>Pool Controller 1</p>
+                <span>TestAddress<br>TestLocation</span>
+                <a href="plant_settings.php?c=12345">Edit controller data</a>
+            </div>
+        </div>
+        <div id="tab_data12345" class="tab_2">
+            <div class="tab_info">
+                <span>Device ID</span>
+                <span>Pool Controller 1</span>
+            </div>
         </div>
     </div>"""
     controllers = parse_controllers(html)

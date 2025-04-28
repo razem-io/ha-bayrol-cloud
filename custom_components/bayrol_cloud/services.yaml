@@ -1,0 +1,15 @@
+# Service definitions for Bayrol Cloud integration
+
+retry_settings_access:
+  name: Retry Settings Access
+  description: Retry access to controller settings after an access failure.
+  fields:
+    entity_id:
+      name: Entity ID
+      description: ID of the select entity for which to retry settings access
+      required: true
+      example: "select.pool_controller_filterpumpe"
+      selector:
+        entity:
+          integration: bayrol_cloud
+          domain: select

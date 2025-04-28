@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import logging
+
+from .helpers import conditional_log
 from typing import Any
 
 import voluptuous as vol
@@ -39,7 +41,7 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
 async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
     """Validate the user input allows us to connect."""
 
-    _LOGGER.debug("Starting validation of input")
+    conditional_log(_LOGGER, logging.DEBUG, "Starting validation of input", debug_mode=False)
 
     # Get shared session
     session = async_get_clientsession(hass)
@@ -49,37 +51,37 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
 
     try:
         # Test login (passing credentials directly like test_api.py)
-        _LOGGER.debug("Testing login...")
+        conditional_log(_LOGGER, logging.DEBUG, "Testing login...", debug_mode=False)
         if not await api.login(data[CONF_USERNAME], data[CONF_PASSWORD]):
             _LOGGER.error("Login failed")
             raise InvalidAuth
         
-        _LOGGER.debug("Login successful")
+        conditional_log(_LOGGER, logging.DEBUG, "Login successful", debug_mode=False)
 
         # Get list of controllers
-        _LOGGER.debug("Discovering controllers...")
+        conditional_log(_LOGGER, logging.DEBUG, "Discovering controllers...", debug_mode=False)
         controllers = await api.get_controllers()
         if not controllers:
             _LOGGER.error("No controllers found")
             raise CannotConnect
         
-        _LOGGER.debug(f"Found {len(controllers)} controller(s)")
+        conditional_log(_LOGGER, logging.DEBUG, f"Found {len(controllers)} controller(s)", debug_mode=False)
         
         # Test data fetch for each controller (like test_api.py)
         for controller in controllers:
-            _LOGGER.debug(f"Testing controller: {controller['name']} (CID: {controller['cid']})...")
+            conditional_log(_LOGGER, logging.DEBUG, f"Testing controller: {controller['name']} (CID: {controller['cid']})", debug_mode=False)
             
             controller_data = await api.get_data(controller['cid'])
             if not controller_data:
                 _LOGGER.error("No data found for controller")
                 raise CannotConnect
             
-            _LOGGER.debug("Data fetch successful")
-            _LOGGER.debug("Current values: %s", controller_data)
+            conditional_log(_LOGGER, logging.DEBUG, "Data fetch successful", debug_mode=False)
+            conditional_log(_LOGGER, logging.DEBUG, "Current values: %s", controller_data, debug_mode=False)
             
             # If settings password is provided, try to validate it
             if CONF_SETTINGS_PASSWORD in data and data[CONF_SETTINGS_PASSWORD]:
-                _LOGGER.debug("Testing settings password...")
+                conditional_log(_LOGGER, logging.DEBUG, "Testing settings password...", debug_mode=False)
                 
                 # Try to get access first
                 access_granted = await api.get_controller_access(controller['cid'], data[CONF_SETTINGS_PASSWORD])

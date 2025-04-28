@@ -18,18 +18,18 @@ def parse_select_options(html: str) -> Tuple[List[Dict[str, Any]], Optional[int]
     selected_value = None
     selected_text = None
     
-    # Match pattern for options with or without selected attribute
-    # Format: <option( selected="")? value="(\d+)">([^<\t]+)
-    option_pattern = r'<option(?:\s+selected(?:="")?)?(?:\s+value="(\d+)"|value="(\d+)")>\s*([^\t<]+)'
+    # First match each complete option tag
+    option_pattern = r'<option[^>]*?value="(\d+)"[^>]*?>([^<\t]+)'
+    selected_pattern = r'selected(?:="")?'
+    
     matches = re.finditer(option_pattern, html)
     
     for match in matches:
-        # Get value (could be in group 1 or 2 depending on attribute order)
-        value = match.group(1) or match.group(2)
-        value = int(value)
+        # Get value
+        value = int(match.group(1))
         
         # Get text and clean it
-        text = match.group(3).strip()
+        text = match.group(2).strip()
         
         # Add to options list
         options.append({
@@ -37,8 +37,9 @@ def parse_select_options(html: str) -> Tuple[List[Dict[str, Any]], Optional[int]
             'text': text
         })
         
-        # Check if this was the selected option
-        if 'selected' in match.group(0):
+        # Check if this was the selected option - look for selected attribute
+        full_tag = match.group(0)
+        if re.search(selected_pattern, full_tag):
             selected_value = value
             selected_text = text
     

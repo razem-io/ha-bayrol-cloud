@@ -1,13 +1,29 @@
 """Helper functions and base classes for Bayrol Pool Controller integration."""
 import logging
-from typing import Any
+from typing import Any, Callable, Optional
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from . import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
+
+def conditional_log(logger: logging.Logger, level: int, msg: str, *args, debug_mode: bool = False, **kwargs) -> None:
+    """Conditionally log messages based on log level and debug mode.
+    
+    Only logs error messages when debug_mode is False.
+    Logs all messages when debug_mode is True.
+    
+    Args:
+        logger: The logger to use
+        level: The log level (logging.DEBUG, logging.INFO, etc.)
+        msg: The message to log
+        *args: Additional args for the logger
+        debug_mode: Whether debug mode is enabled
+        **kwargs: Additional kwargs for the logger
+    """
+    if level == logging.ERROR or debug_mode:
+        logger.log(level, msg, *args, **kwargs)
 
 def get_device_icon(name: str) -> str:
     """Get the appropriate icon based on device name."""
@@ -37,6 +53,9 @@ def get_device_icon(name: str) -> str:
         return "mdi:electric-switch-closed"
     else:
         return "mdi:electric-switch"  # Default icon
+
+# Define DOMAIN here to avoid circular imports
+DOMAIN = "bayrol_cloud"
 
 def get_device_info(entry: ConfigEntry) -> dict[str, Any]:
     """Get device info dictionary."""
@@ -68,20 +87,19 @@ class BayrolEntity(CoordinatorEntity):
         
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        _LOGGER.debug("%s: Handling coordinator update", self._attr_name)
+        conditional_log(_LOGGER, logging.DEBUG, "%s: Handling coordinator update", self._attr_name, debug_mode=False)
         self.async_write_ha_state()
         
     @property
     def available(self) -> bool:
         """Return if entity is available."""
         if not super().available or self.coordinator.data is None:
-            _LOGGER.debug("%s: Not available (super: %s, data: %s)", 
-                         self._attr_name, super().available, self.coordinator.data is not None)
+            conditional_log(_LOGGER, logging.DEBUG, "%s: Not available (super: %s, data: %s, debug_mode=False)", self._attr_name, super().available, self.coordinator.data is not None)
             return False
         
         # If device is offline, mark entity as unavailable
         if self.coordinator.data.get("status") == "offline":
-            _LOGGER.debug("%s: Device offline", self._attr_name)
+            conditional_log(_LOGGER, logging.DEBUG, "%s: Device offline", self._attr_name, debug_mode=False)
             return False
 
         # For status sensor, only check coordinator data exists
@@ -91,14 +109,14 @@ class BayrolEntity(CoordinatorEntity):
         # For measurement sensors (pH, mV, T), check if data exists
         if self._sensor_id in ["pH", "mV", "T"]:
             available = self._sensor_id in self.coordinator.data
-            _LOGGER.debug("%s: Measurement sensor available: %s", self._attr_name, available)
+            conditional_log(_LOGGER, logging.DEBUG, "%s: Measurement sensor available: %s", self._attr_name, available, debug_mode=False)
             return available
             
         # For device status entities, check if data exists
         if "device_status" in self.coordinator.data:
             available = self._sensor_id in self.coordinator.data["device_status"]
-            _LOGGER.debug("%s: Device status available: %s", self._attr_name, available)
+            conditional_log(_LOGGER, logging.DEBUG, "%s: Device status available: %s", self._attr_name, available, debug_mode=False)
             return available
             
-        _LOGGER.debug("%s: No device status data", self._attr_name)
+        conditional_log(_LOGGER, logging.DEBUG, "%s: No device status data", self._attr_name, debug_mode=False)
         return False
