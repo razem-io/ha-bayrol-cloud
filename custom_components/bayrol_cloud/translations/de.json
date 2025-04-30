@@ -1,0 +1,62 @@
+{
+    "config": {
+        "abort": {
+            "already_configured": "Gerät ist bereits konfiguriert",
+            "auth_failed": "Authentifizierung fehlgeschlagen"
+        },
+        "error": {
+            "cannot_connect": "Verbindung fehlgeschlagen",
+            "invalid_auth": "Ungültige Authentifizierung",
+            "invalid_settings_auth": "Ungültiges Einstellungspasswort",
+            "invalid_controller_selection": "Ungültige Controllerauswahl",
+            "unknown": "Unerwarteter Fehler"
+        },
+        "step": {
+            "user": {
+                "data": {
+                    "username": "Benutzername",
+                    "password": "Passwort",
+                    "refresh_interval": "Datenaktualisierungsintervall (Sekunden)"
+                },
+                "title": "Mit Bayrol Pool Access verbinden",
+                "description": "Bitte geben Sie Ihre Bayrol Pool Access Zugangsdaten ein."
+            },
+            "select_controller": {
+                "data": {
+                    "controller_action": "Controller auswählen"
+                },
+                "title": "Controller auswählen",
+                "description": "Folgende Controller wurden gefunden. Wählen Sie einen aus oder fügen Sie einen Controller manuell über seine ID hinzu."
+            },
+            "controller": {
+                "data": {
+                    "cid": "Controller-ID"
+                },
+                "title": "Controller über ID hinzufügen",
+                "description": "Geben Sie die Controller-ID ein. Sie finden diese Nummer in der URL, wenn Sie Ihren Controller in der Bayrol Pool Access Weboberfläche anzeigen."
+            },
+            "controller_settings": {
+                "data": {
+                    "settings_password": "Einstellungspasswort (optional)"
+                },
+                "title": "Controller-Einstellungen",
+                "description": "Konfigurieren Sie {controller_name} (ID: {controller_id}). Geben Sie das Einstellungspasswort ein, wenn Sie Controller-Einstellungen ändern möchten. Jeder Controller kann ein eigenes Passwort haben."
+            }
+        }
+    },
+    "options": {
+        "error": {
+            "invalid_settings_auth": "Ungültiges Einstellungspasswort"
+        },
+        "step": {
+            "init": {
+                "data": {
+                    "settings_password": "Einstellungspasswort (optional)",
+                    "refresh_interval": "Datenaktualisierungsintervall (Sekunden)"
+                },
+                "title": "Bayrol Pool Controller Optionen",
+                "description": "Aktualisieren Sie die Einstellungen für diesen Controller. Das Einstellungspasswort wird nur benötigt, wenn Sie Controller-Einstellungen ändern möchten."
+            }
+        }
+    }
+}

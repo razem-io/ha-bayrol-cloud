@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 
 from .helpers import conditional_log
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 import voluptuous as vol
 import aiohttp
@@ -30,11 +30,22 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_USERNAME): str,
         vol.Required(CONF_PASSWORD): str,
-        vol.Optional(CONF_SETTINGS_PASSWORD): str,
         vol.Optional("refresh_interval", default=DEFAULT_REFRESH_INTERVAL): vol.All(
             vol.Coerce(int),
             vol.Range(min=MIN_REFRESH_INTERVAL)
         ),
+    }
+)
+
+STEP_CONTROLLER_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_CID): str,
+    }
+)
+
+STEP_CONTROLLER_SETTINGS_SCHEMA = vol.Schema(
+    {
+        vol.Optional(CONF_SETTINGS_PASSWORD): str,
     }
 )
 
@@ -46,11 +57,11 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
     # Get shared session
     session = async_get_clientsession(hass)
     
-    # Initialize API without credentials (like test_api.py)
+    # Initialize API without credentials
     api = BayrolPoolAPI(session)
 
     try:
-        # Test login (passing credentials directly like test_api.py)
+        # Test login
         conditional_log(_LOGGER, logging.DEBUG, "Testing login...", debug_mode=False)
         if not await api.login(data[CONF_USERNAME], data[CONF_PASSWORD]):
             _LOGGER.error("Login failed")
@@ -66,35 +77,6 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
             raise CannotConnect
         
         conditional_log(_LOGGER, logging.DEBUG, f"Found {len(controllers)} controller(s)", debug_mode=False)
-        
-        # Test data fetch for each controller (like test_api.py)
-        for controller in controllers:
-            conditional_log(_LOGGER, logging.DEBUG, f"Testing controller: {controller['name']} (CID: {controller['cid']})", debug_mode=False)
-            
-            controller_data = await api.get_data(controller['cid'])
-            if not controller_data:
-                _LOGGER.error("No data found for controller")
-                raise CannotConnect
-            
-            conditional_log(_LOGGER, logging.DEBUG, "Data fetch successful", debug_mode=False)
-            conditional_log(_LOGGER, logging.DEBUG, "Current values: %s", controller_data, debug_mode=False)
-            
-            # If settings password is provided, try to validate it
-            if CONF_SETTINGS_PASSWORD in data and data[CONF_SETTINGS_PASSWORD]:
-                conditional_log(_LOGGER, logging.DEBUG, "Testing settings password...", debug_mode=False)
-                
-                # Try to get access first
-                access_granted = await api.get_controller_access(controller['cid'], data[CONF_SETTINGS_PASSWORD])
-                
-                if not access_granted:
-                    _LOGGER.warning("Settings password validation failed")
-                    data[CONF_SETTINGS_PASSWORD] = None  # Clear invalid password
-                    errors["settings_password"] = "invalid_settings_auth"
-                    return {
-                        "controllers": controllers,
-                        "username": data[CONF_USERNAME],
-                        "password": data[CONF_PASSWORD]
-                    }
 
         return {
             "controllers": controllers,
@@ -109,10 +91,101 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
         _LOGGER.error("Unexpected error: %s", err)
         raise CannotConnect
 
+
+async def validate_controller(hass: HomeAssistant, data: dict[str, Any], cid: str) -> dict[str, Any]:
+    """Validate specific controller by ID."""
+    
+    conditional_log(_LOGGER, logging.DEBUG, f"Validating controller with ID {cid}", debug_mode=False)
+    
+    # Get shared session
+    session = async_get_clientsession(hass)
+    
+    # Initialize API
+    api = BayrolPoolAPI(session)
+    
+    try:
+        # Test login
+        if not await api.login(data[CONF_USERNAME], data[CONF_PASSWORD]):
+            _LOGGER.error("Login failed")
+            raise InvalidAuth
+            
+        # Test if we can access the controller
+        controller_data = await api.get_data(cid)
+        if not controller_data:
+            _LOGGER.error(f"No data found for controller ID {cid}")
+            raise CannotConnect
+            
+        # Get controllers list to find the name
+        controllers = await api.get_controllers()
+        
+        # Try to find matching controller in the list
+        controller_name = None
+        for controller in controllers:
+            if controller['cid'] == cid:
+                controller_name = controller['name']
+                break
+                
+        # If not found in the list, use a generic name
+        if not controller_name:
+            controller_name = f"Pool Controller ({cid})"
+            
+        return {
+            "name": controller_name,
+            "cid": cid
+        }
+            
+    except aiohttp.ClientError as err:
+        _LOGGER.error(f"Error connecting to controller {cid}: {err}")
+        raise CannotConnect
+    except Exception as err:
+        _LOGGER.error(f"Unexpected error validating controller {cid}: {err}")
+        raise CannotConnect
+
+
+async def validate_controller_password(hass: HomeAssistant, data: dict[str, Any], cid: str, password: str) -> bool:
+    """Validate settings password for a specific controller."""
+    
+    if not password:
+        return True  # No password provided, nothing to validate
+        
+    conditional_log(_LOGGER, logging.DEBUG, f"Validating settings password for controller {cid}", debug_mode=False)
+    
+    # Get shared session
+    session = async_get_clientsession(hass)
+    
+    # Initialize API
+    api = BayrolPoolAPI(session)
+    
+    try:
+        # Login first
+        if not await api.login(data[CONF_USERNAME], data[CONF_PASSWORD]):
+            _LOGGER.error("Login failed")
+            raise InvalidAuth
+            
+        # Try to get access with the password
+        access_granted = await api.get_controller_access(cid, password)
+        
+        if not access_granted:
+            _LOGGER.warning(f"Settings password validation failed for controller {cid}")
+            return False
+            
+        return True
+        
+    except Exception as err:
+        _LOGGER.error(f"Error validating settings password for controller {cid}: {err}")
+        return False
+
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Bayrol Pool Controller."""
 
     VERSION = 1
+
+    def __init__(self) -> None:
+        """Initialize the config flow."""
+        self._credentials: Dict[str, Any] = {}
+        self._controllers: List[Dict[str, str]] = []
+        self._current_controller: Dict[str, str] = {}
+        self._discovered_controllers: List[Dict[str, str]] = []
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -122,28 +195,25 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             try:
-                info = await validate_input(self.hass, user_input)
+                # Store credentials and refresh interval for use in later steps
+                self._credentials = {
+                    CONF_USERNAME: user_input[CONF_USERNAME],
+                    CONF_PASSWORD: user_input[CONF_PASSWORD],
+                    "refresh_interval": user_input.get("refresh_interval", DEFAULT_REFRESH_INTERVAL)
+                }
                 
-                # Create an entry for each controller
-                for controller in info["controllers"]:
-                    entry_data = {
-                        CONF_USERNAME: info["username"],
-                        CONF_PASSWORD: info["password"],
-                        CONF_CID: controller["cid"],
-                        "device_name": controller["name"]
-                    }
+                # Validate the credentials and get the list of controllers
+                info = await validate_input(self.hass, self._credentials)
+                self._discovered_controllers = info["controllers"]
+                
+                # Store controller info for next step
+                if self._discovered_controllers:
+                    # Show the menu to either select a discovered controller or add a new one
+                    return await self.async_step_select_controller()
+                else:
+                    # No controllers found - go directly to manual entry
+                    return await self.async_step_controller()
                     
-                    # Add settings password if provided
-                    if CONF_SETTINGS_PASSWORD in user_input:
-                        entry_data[CONF_SETTINGS_PASSWORD] = user_input[CONF_SETTINGS_PASSWORD]
-                    
-                    # Set unique ID based on CID
-                    await self.async_set_unique_id(f"bayrol_{controller['cid']}")
-                    self._abort_if_unique_id_configured()
-                    
-                    title = f"{controller['name']} ({controller['cid']})"
-                    return self.async_create_entry(title=title, data=entry_data)
-
             except CannotConnect:
                 errors["base"] = "cannot_connect"
             except InvalidAuth:
@@ -155,6 +225,133 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="user", data_schema=STEP_USER_DATA_SCHEMA, errors=errors
         )
+        
+    async def async_step_select_controller(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle controller selection."""
+        errors: dict[str, str] = {}
+        
+        if user_input is not None:
+            if user_input.get("controller_action") == "manual":
+                # User chose to manually add a controller by ID
+                return await self.async_step_controller()
+            else:
+                # User selected a discovered controller
+                controller_index = int(user_input["controller_action"])
+                if 0 <= controller_index < len(self._discovered_controllers):
+                    self._current_controller = self._discovered_controllers[controller_index]
+                    # Move to settings password step for this controller
+                    return await self.async_step_controller_settings()
+                else:
+                    errors["base"] = "invalid_controller_selection"
+        
+        # Build the options for controller selection
+        controller_options = {}
+        for i, controller in enumerate(self._discovered_controllers):
+            controller_options[str(i)] = f"{controller['name']} (ID: {controller['cid']})"
+        
+        # Add option for manual entry
+        controller_options["manual"] = "Add controller by ID"
+        
+        return self.async_show_form(
+            step_id="select_controller",
+            data_schema=vol.Schema({
+                vol.Required("controller_action"): vol.In(controller_options)
+            }),
+            errors=errors,
+        )
+        
+    async def async_step_controller(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle manual controller ID entry."""
+        errors: dict[str, str] = {}
+        
+        if user_input is not None:
+            try:
+                cid = user_input[CONF_CID]
+                
+                # Check if this controller is already configured
+                await self.async_set_unique_id(f"bayrol_{cid}")
+                self._abort_if_unique_id_configured()
+                
+                # Validate that the controller exists and is accessible
+                controller_info = await validate_controller(self.hass, self._credentials, cid)
+                
+                # Store controller info for the next step
+                self._current_controller = controller_info
+                
+                # Move to settings password step
+                return await self.async_step_controller_settings()
+                
+            except CannotConnect:
+                errors["base"] = "cannot_connect"
+            except Exception as err:
+                _LOGGER.exception("Error adding controller: %s", err)
+                errors["base"] = "unknown"
+                
+        return self.async_show_form(
+            step_id="controller",
+            data_schema=STEP_CONTROLLER_SCHEMA,
+            errors=errors
+        )
+        
+    async def async_step_controller_settings(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle settings password entry for a specific controller."""
+        errors: dict[str, str] = {}
+        
+        if user_input is not None:
+            try:
+                settings_password = user_input.get(CONF_SETTINGS_PASSWORD)
+                
+                # If a password was provided, validate it
+                if settings_password:
+                    password_valid = await validate_controller_password(
+                        self.hass,
+                        self._credentials,
+                        self._current_controller["cid"],
+                        settings_password
+                    )
+                    
+                    if not password_valid:
+                        errors[CONF_SETTINGS_PASSWORD] = "invalid_settings_auth"
+                        # Keep the password field empty on error
+                        user_input[CONF_SETTINGS_PASSWORD] = None
+                
+                # If no errors, create the entry
+                if not errors:
+                    # Create entry data with credentials, controller info, and settings password
+                    entry_data = {
+                        CONF_USERNAME: self._credentials[CONF_USERNAME],
+                        CONF_PASSWORD: self._credentials[CONF_PASSWORD],
+                        CONF_CID: self._current_controller["cid"],
+                        "device_name": self._current_controller["name"],
+                        "refresh_interval": self._credentials.get("refresh_interval", DEFAULT_REFRESH_INTERVAL)
+                    }
+                    
+                    # Add settings password if provided and valid
+                    if settings_password and not errors:
+                        entry_data[CONF_SETTINGS_PASSWORD] = settings_password
+                    
+                    title = f"{self._current_controller['name']} ({self._current_controller['cid']})"
+                    return self.async_create_entry(title=title, data=entry_data)
+                
+            except Exception as err:
+                _LOGGER.exception("Error setting up controller: %s", err)
+                errors["base"] = "unknown"
+        
+        return self.async_show_form(
+            step_id="controller_settings",
+            data_schema=STEP_CONTROLLER_SETTINGS_SCHEMA,
+            errors=errors,
+            description_placeholders={
+                "controller_name": self._current_controller.get("name", "Unknown Controller"),
+                "controller_id": self._current_controller.get("cid", "Unknown ID")
+            }
+        )
 
     @staticmethod
     @callback
@@ -163,6 +360,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> config_entries.OptionsFlow:
         """Create the options flow."""
         return OptionsFlowHandler(config_entry)
+        
+    async def async_step_import(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        """Handle import from configuration.yaml."""
+        return await self.async_step_user(user_input)
 
 class OptionsFlowHandler(config_entries.OptionsFlow):
     """Handle options flow for Bayrol Pool Controller."""
