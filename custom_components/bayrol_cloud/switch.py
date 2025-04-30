@@ -34,7 +34,7 @@ class BayrolDebugSwitch(CoordinatorEntity, SwitchEntity):
         self._cid = entry.data[CONF_CID]
         self._api = api
         device_name = entry.data.get("device_name", "Pool Controller")
-        self._version = "0.1.4"  # Version from manifest.json
+        self._version = "0.2.0"  # Version from manifest.json
         self._last_updated = None
         
         # Set both entity_id and unique_id with the same format as sensors
