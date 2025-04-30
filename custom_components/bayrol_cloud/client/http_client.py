@@ -18,6 +18,7 @@ from .parser import (
     check_login_error,
     parse_controllers,
     parse_pool_data,
+    parse_overview_page,
 )
 from ..helpers import conditional_log
 
@@ -232,13 +233,49 @@ class BayrolHttpClient:
             _LOGGER.error("Error getting device status: %s", err, exc_info=True)
             return ""
 
-    async def get_data(self, cid: str) -> Dict[str, Any]:
-        """Get pool data for a specific controller."""
+    async def get_overview_data(self) -> Dict[str, Dict[str, Any]]:
+        """Get data for all controllers from the overview page.
+        
+        This is used as a fallback when direct access to a controller fails or requires authentication.
+        """
         if not self._phpsessid:
             _LOGGER.error("No session ID available. Please login first.")
             return {}
 
         try:
+            url = f"{BASE_URL}/p/plants.php"
+            headers = self._get_headers(CONTROLLERS_HEADERS)
+
+            conditional_log(_LOGGER, logging.DEBUG, "Getting overview data from %s", url, debug_mode=self._debug_mode)
+            async with self._session.get(url, headers=headers) as response:
+                conditional_log(_LOGGER, logging.DEBUG, "Get overview data response status: %s", response.status, debug_mode=self._debug_mode)
+                
+                if response.status != 200:
+                    _LOGGER.error("Overview data fetch failed with status: %s", response.status)
+                    return {}
+                
+                html = await response.text()
+                if self._debug_mode:
+                    self._last_raw_html = html
+                    
+                return parse_overview_page(html, debug=self._debug_mode)
+
+        except Exception as err:
+            _LOGGER.error("Error getting overview data: %s", err, exc_info=True)
+            return {}
+
+    async def get_data(self, cid: str) -> Dict[str, Any]:
+        """Get pool data for a specific controller.
+        
+        First attempts to get data directly from the controller. If that fails or requires
+        authentication, falls back to getting data from the overview page.
+        """
+        if not self._phpsessid:
+            _LOGGER.error("No session ID available. Please login first.")
+            return {}
+
+        try:
+            # First try to get data directly from the controller
             url = f"{BASE_URL}/getdata.php?cid={cid}"
             headers = self._get_headers(DATA_HEADERS)
             headers["Referer"] = f"{BASE_URL}/m/plants.php"
@@ -248,17 +285,36 @@ class BayrolHttpClient:
                 conditional_log(_LOGGER, logging.DEBUG, "Get data response status: %s", response.status, debug_mode=self._debug_mode)
                 
                 if response.status != 200:
-                    _LOGGER.error("Data fetch failed with status: %s", response.status)
-                    return {}
+                    _LOGGER.warning("Direct data fetch failed with status: %s, falling back to overview page", response.status)
+                    # Fall back to getting data from the overview page
+                    overview_data = await self.get_overview_data()
+                    return overview_data.get(cid, {})
                 
                 html = await response.text()
                 if self._debug_mode:
                     self._last_raw_html = html
-                return parse_pool_data(html)
+                
+                # Try to parse the data directly
+                data = parse_pool_data(html)
+                
+                # If parsing fails or data is empty, try falling back to the overview page
+                if not data or (len(data) == 1 and "status" in data and data["status"] == "offline"):
+                    conditional_log(_LOGGER, logging.DEBUG, "Direct data fetch succeeded but parsing failed, falling back to overview page", debug_mode=self._debug_mode)
+                    overview_data = await self.get_overview_data()
+                    if cid in overview_data:
+                        return overview_data[cid]
+                
+                return data
 
         except Exception as err:
             _LOGGER.error("Error getting pool data: %s", err, exc_info=True)
-            return {}
+            # Try fallback as a last resort
+            try:
+                overview_data = await self.get_overview_data()
+                return overview_data.get(cid, {})
+            except Exception as fallback_err:
+                _LOGGER.error("Fallback to overview page also failed: %s", fallback_err, exc_info=True)
+                return {}
 
     async def set_controller_password(self, cid: str, password: str) -> bool:
         """Set the controller password."""

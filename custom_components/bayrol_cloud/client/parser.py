@@ -4,6 +4,7 @@ import logging
 from ..helpers import conditional_log
 import re
 from typing import Any, Dict, List, Optional, Tuple
+from .constants import COMPATIBLE_DEVICE_MODELS, GITHUB_ISSUES_URL
 from bs4 import BeautifulSoup
 from datetime import datetime
 
@@ -193,6 +194,134 @@ def check_device_offline(html: str, debug: bool = False) -> Optional[Dict[str, A
                 return offline_info
     
     return None
+
+def check_device_compatibility(device_model: str) -> bool:
+    """Check if a device model is in the compatibility list."""
+    return device_model in COMPATIBLE_DEVICE_MODELS
+
+def parse_overview_page(html: str, debug: bool = False) -> Dict[str, Dict[str, Any]]:
+    """Parse pool data from the overview page HTML.
+    
+    Returns a dict with controller ID as key and device data as value.
+    Used as a fallback when direct access is not available or fails.
+    """
+    conditional_log(_LOGGER, logging.DEBUG, "Starting to parse overview page", debug_mode=debug)
+    soup = BeautifulSoup(html, 'html.parser')
+    results = {}
+    
+    # Find all tab_row divs, each containing a separate controller
+    tab_rows = soup.find_all('div', class_='tab_row')
+    if not tab_rows:
+        _LOGGER.error("No tab_row divs found in HTML")
+        return results
+
+    for tab_row in tab_rows:
+        # Find the tab_1 div containing controller info
+        tab_1 = tab_row.find('div', class_='tab_1')
+        # Find the tab_2 div containing controller data
+        tab_2 = tab_row.find('div', class_='tab_2')
+        
+        if not tab_1 or not tab_2:
+            _LOGGER.warning("Incomplete controller data in tab_row: missing tab_1 or tab_2")
+            continue
+        
+        # Extract controller ID from tab_1 onclick attribute
+        cid = None
+        onclick_div = tab_1.find('div', onclick=re.compile(r'plant_settings\.php\?c=\d+'))
+        if onclick_div:
+            onclick = onclick_div.get('onclick', '')
+            cid_match = re.search(r'c=(\d+)', onclick)
+            if cid_match:
+                cid = cid_match.group(1)
+        
+        # If we couldn't get cid from tab_1, try from tab_2 id attribute
+        if not cid and 'id' in tab_2.attrs:
+            tab_id_match = re.search(r'tab_data(\d+)', tab_2.get('id', ''))
+            if tab_id_match:
+                cid = tab_id_match.group(1)
+                
+        if not cid:
+            _LOGGER.warning("Could not find controller ID in tab_row")
+            continue
+            
+        # Extract device name from tab_1
+        name = "Pool Controller"
+        p_tag = tab_1.find('p')
+        if p_tag:
+            name = p_tag.text.strip()
+        
+        # Parse measurements from tab_2
+        data = {}
+        
+        # Extract device model and version from tab_info
+        device_model = None
+        device_version = None
+        tab_info = tab_2.find('div', class_='tab_info')
+        if tab_info:
+            spans = tab_info.find_all('span')
+            if len(spans) >= 2:
+                device_id = spans[0].text.strip() if spans[0] else None
+                device_model = spans[1].text.strip() if spans[1] else None
+                device_version = spans[2].text.strip() if len(spans) > 2 and spans[2] else None
+                
+                data["device_id"] = device_id
+                data["device_model"] = device_model
+                data["device_version"] = device_version
+                
+                # Check compatibility
+                if device_model and not check_device_compatibility(device_model):
+                    _LOGGER.warning(
+                        "Device model '%s' is not in the compatibility list but was successfully parsed. "
+                        "Please consider opening an issue at %s to get this device added.",
+                        device_model, GITHUB_ISSUES_URL
+                    )
+        
+        # Extract measurement values
+        tab_boxes = tab_2.find_all('div', class_='tab_box')
+        measurement_map = {
+            'pH': 'pH',
+            'Redox': 'mV',
+            'mV': 'mV',
+            'T': 'T',
+            'T1': 'T'
+        }
+        
+        for box in tab_boxes:
+            span = box.find('span')
+            h1 = box.find('h1')
+            if span and h1:
+                # Extract the label before the unit
+                label_text = span.text.strip()
+                label_match = re.match(r'^([^[]+)', label_text)
+                if label_match:
+                    raw_label = label_match.group(1).replace('\xa0', ' ').strip()
+                    # Map the raw label to standardized key
+                    label = measurement_map.get(raw_label)
+                    if label:
+                        value = h1.text.strip()
+                        try:
+                            data[label] = float(value)
+                            # Check for both warning and alarm states
+                            box_classes = box.get('class', [])
+                            has_alarm = 'stat_warning' in box_classes or 'stat_alarm' in box_classes
+                            data[f"{label}_alarm"] = has_alarm
+                            conditional_log(_LOGGER, logging.DEBUG, "Successfully parsed %s: %s (alarm: %s)", 
+                                        label, value, has_alarm, debug_mode=debug)
+                        except ValueError:
+                            _LOGGER.error("Failed to convert value '%s' to float for measurement '%s'", value, label)
+                    else:
+                        conditional_log(_LOGGER, logging.DEBUG, "Unknown measurement label: %s", raw_label, debug_mode=debug)
+        
+        if data:
+            data["status"] = "online"
+            data["name"] = name
+            results[cid] = data
+            conditional_log(_LOGGER, logging.DEBUG, "Successfully parsed controller %s data: %s", cid, data, debug_mode=debug)
+            
+    if not results:
+        _LOGGER.warning("No controller data found in overview page")
+        
+    return results
 
 def parse_pool_data(html: str, debug: bool = False) -> Dict[str, Any]:
     """Parse pool data from getdata response HTML."""

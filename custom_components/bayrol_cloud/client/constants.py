@@ -2,6 +2,15 @@
 
 BASE_URL = "https://www.bayrol-poolaccess.de/webview"
 
+# List of known compatible device models
+COMPATIBLE_DEVICE_MODELS = [
+    "Pool Relax Cl",
+    "PoolManager Chlor (Cl)",
+]
+
+# GitHub repository info for creating issues
+GITHUB_ISSUES_URL = "https://github.com/razemio/ha-bayrol/issues/new"
+
 # Common headers used in all requests
 BASE_HEADERS = {
     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:131.0) Gecko/20100101 Firefox/131.0",

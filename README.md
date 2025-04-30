@@ -11,10 +11,10 @@ It currently only supports the German Bayrol Cloud services (https://www.bayrol-
 ## Tested Devices
 
 Currently tested with:
-- BAYROL PoolRelax 3
 - BAYROL Automatic Cl-pH
-- Bayrol Automatic SALT AS7
-- BAYROL Pool Manager 5
+- BAYROL Automatic SALT AS7
+- BAYROL PoolManager Chlor (Cl)
+- BAYROL PoolRelax CI
 
 Have a different Bayrol device? Please [open an issue](https://github.com/razem-io/ha-bayrol-cloud/issues) to help expand device support! When opening an issue, please include:
 - Your device model

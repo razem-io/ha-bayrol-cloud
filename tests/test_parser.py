@@ -7,6 +7,8 @@ from custom_components.bayrol_cloud.client.parser import (
     parse_login_form,
     check_login_error,
     check_device_offline,
+    parse_overview_page,
+    check_device_compatibility,
     DebugInfo,
 )
 
@@ -222,3 +224,125 @@ def test_parse_pool_data_pm5():
 
     html_without_error = """<div>Welcome!</div>"""
     assert check_login_error(html_without_error) is False
+
+# Sample HTML for the overview page with multiple controllers
+OVERVIEW_PAGE_HTML = """
+<div id="content_table">
+    <div class="tab_paging">
+        <div class="search">
+        <form method="get" action="plants.php">
+        <input type="submit" name="send" value="">
+        <input type="text" name="s" value="" placeholder="Search controller">
+        <input type="button" name="cancel" value="" onclick="document.location.href='plants.php?s='">
+        </form>
+        </div>
+        <div id="btn_sort">
+        <div id="btn_sort_menu">
+            <ul>
+            <li>&nbsp;&nbsp;Sort by:</li>
+            <li><a class="on" href="plants.php?sort=1">Device name</a></li>
+            <li><a class="" href="plants.php?sort=2">Device with alarm status first</a></li>
+            <li><a class="" href="plants.php?sort=3">Device with ok status first</a></li>
+            </ul>
+        </div>
+        </div>
+        <div class="reload" onclick="document.location.reload();" title="Reload page (F5)">
+        </div>
+    </div>
+    <div class="tab_row">
+        <div class="tab_1">
+            <div style="float:left;" onclick="document.location.href='plant_settings.php?c=11111'" title="Edit controller data">
+                <p>Haho Pool Controller 1&nbsp;</p>
+                <span>Test Company&nbsp;<br>Test Address, Test City&nbsp;</span>
+                <a href="plant_settings.php?c=11111">Edit controller data</a>
+            </div>
+        </div>
+        <div id="tab_data11111" class="tab_2"><div><div class="gapp_"></div><div class="tab_data_link" onclick="document.location.href='device.php?c=11111'"><div class="gstat_ok"></div><div class="tab_box stat_ok"><span>pH&nbsp;[pH]</span><h1>7.20</h1></div><div class="tab_box stat_ok"><span>mV&nbsp;[mV]</span><h1>733</h1></div><div class="tab_box stat_ok"><span>T&nbsp;[°C]</span><h1>34.2</h1></div><div class="tab_box "></div><div class="tab_info"><span>TEST-SERIAL1</span><br><span>Pool Relax Cl</span><br><span>v3.5/220211 PR3</span><br><span><a href="device.php?c=11111">Direct access</a></span></div></div></div></div>
+    </div>
+    <div class="tab_row">
+        <div class="tab_1">
+            <div style="float:left;" onclick="document.location.href='plant_settings.php?c=22222'" title="Edit controller data">
+                <p>Teeuwen&nbsp;</p>
+                <span>&nbsp;<br>&nbsp;</span>
+                <a href="plant_settings.php?c=22222">Edit controller data</a>
+            </div>
+        </div>
+        <div id="tab_data22222" class="tab_2"><div><div class="gapp_pm5" onclick="gotoapp(22222)"><span>App Link<span></span></span></div><div class="tab_data_link" onclick="document.location.href='device.php?c=22222'"><div class="gstat_ok"></div><div class="tab_box stat_ok"><span>pH&nbsp;[pH]</span><h1>7.37</h1></div><div class="tab_box stat_ok"><span>mV&nbsp;[mV]</span><h1>709</h1></div><div class="tab_box stat_ok"><span>T1&nbsp;[°C]</span><h1>28.2</h1></div><div class="tab_box "></div><div class="tab_info"><span>TEST-SERIAL2</span><br><span>PoolManager Chlor (Cl)</span><br><span>v240729 (9.1.1)</span><br><span><a href="device.php?c=22222">Direct access</a></span></div></div></div></div>
+    </div>
+</div>
+"""
+
+def test_parse_overview_page():
+    """Test parsing of the overview page with multiple controllers."""
+    data = parse_overview_page(OVERVIEW_PAGE_HTML)
+    
+    # Verify we have data for both controllers
+    assert "11111" in data
+    assert "22222" in data
+    
+    # Check the data for the first controller (Haho Pool Controller)
+    haho_data = data["11111"]
+    assert haho_data["pH"] == 7.20
+    assert haho_data["mV"] == 733
+    assert haho_data["T"] == 34.2
+    assert haho_data["status"] == "online"
+    assert haho_data["name"] == "Haho Pool Controller 1"
+    assert haho_data["device_model"] == "Pool Relax Cl"
+    assert haho_data["device_id"] == "TEST-SERIAL1"
+    assert haho_data["device_version"] == "v3.5/220211 PR3"
+    assert not haho_data["pH_alarm"]
+    assert not haho_data["mV_alarm"]
+    assert not haho_data["T_alarm"]
+    
+    # Check the data for the second controller (Teeuwen)
+    teeuwen_data = data["22222"]
+    assert teeuwen_data["pH"] == 7.37
+    assert teeuwen_data["mV"] == 709
+    assert teeuwen_data["T"] == 28.2  # T1 should be mapped to T
+    assert teeuwen_data["status"] == "online"
+    assert teeuwen_data["name"] == "Teeuwen"
+    assert teeuwen_data["device_model"] == "PoolManager Chlor (Cl)"
+    assert teeuwen_data["device_id"] == "TEST-SERIAL2"
+    assert teeuwen_data["device_version"] == "v240729 (9.1.1)"
+    assert not teeuwen_data["pH_alarm"]
+    assert not teeuwen_data["mV_alarm"]
+    assert not teeuwen_data["T_alarm"]
+
+def test_parse_overview_page_empty():
+    """Test parsing empty overview page."""
+    data = parse_overview_page(EMPTY_HTML)
+    assert data == {}
+
+def test_check_device_compatibility():
+    """Test checking device compatibility against known list."""
+    # Should be compatible
+    assert check_device_compatibility("Pool Relax Cl") is True
+    assert check_device_compatibility("PoolManager Chlor (Cl)") is True
+    
+    # Should not be compatible
+    assert check_device_compatibility("Unknown Device") is False
+    assert check_device_compatibility("") is False
+
+def test_parse_overview_page_with_warnings(caplog):
+    """Test parsing overview page with device not in compatibility list."""
+    # Modified overview page with unknown device model
+    html = OVERVIEW_PAGE_HTML.replace("Pool Relax Cl", "Unknown Device Model")
+    
+    # Set up logging capture
+    caplog.set_level(logging.WARNING)
+    
+    # Parse the data
+    data = parse_overview_page(html)
+    
+    # Check that the warning was logged
+    warning_logged = False
+    for record in caplog.records:
+        if "is not in the compatibility list but was successfully parsed" in record.message and "Unknown Device Model" in record.message:
+            warning_logged = True
+            break
+    
+    assert warning_logged, "Warning about unknown device model was not logged"
+    
+    # The data should still be parsed successfully
+    assert "11111" in data
+    assert data["11111"]["device_model"] == "Unknown Device Model"

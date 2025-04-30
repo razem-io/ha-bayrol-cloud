@@ -224,7 +224,7 @@ def main():
         sys.exit(1)
 
     # Settings page parameters
-    cid = "39516"
+    cid = "" #enter an ID for testing here
     page = "switching"  # Main switching page to see all outputs
     device_password = "1234"  # Default device password
 
