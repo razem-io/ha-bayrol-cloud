@@ -10,12 +10,17 @@ from custom_components.bayrol_cloud.client.parser import (
     parse_overview_page,
     check_device_compatibility,
     DebugInfo,
+    get_available_measurements,
 )
 
 # Sample device HTML outputs
 POOL_RELAX_CL_HTML = """<div><div class="gapp_"></div><div class="tab_data_link" onclick="document.location.href='device.php?c=XXXXX'"><div class="gstat_ok"></div><div class="tab_box stat_ok"><span>pH&nbsp;[pH]</span><h1>7.17</h1></div><div class="tab_box stat_ok"><span>mV&nbsp;[mV]</span><h1>708</h1></div><div class="tab_box stat_ok"><span>T&nbsp;[°C]</span><h1>34.4</h1></div><div class="tab_box "></div><div class="tab_info"><span>24PR3-1928</span></br><span>Pool Relax Cl</span></br><span>v3.5/220211 PR3</span></br><span><a href="device.php?c=XXXXX">Direct access</a></div></div></div>"""
 
 AUTOMATIC_CL_PH_HTML = """<div><div class="gapp_ase" onclick="gotoapp(28354)"><span>App Link<span></div><div class="tab_data_link" onclick="document.location.href='device.php?c=XXXXX&s=v1.40 (220715)'"><div class="gstat_warning"></div><div class="tab_box stat_warning"><span>pH&nbsp;[pH]</span><h1>6.5</h1></div><div class="tab_box stat_warning"><span>Redox&nbsp;[mV]</span><h1>685</h1></div><div class="tab_box stat_warning"><span>Temp.&nbsp;[°C]</span><h1>19.0</h1></div><div class="tab_box "></div><div class="tab_info"><span>22ACL2-02745</span></br><span>Automatic Cl-pH</span></br><span>v1.40 (220715)</span></br><span><a href="device.php?c=XXXXX&s=v1.40 (220715)">Accès direct</a></div></div></div>"""
+
+POOLMANAGER_PRO_HTML = """<div><div class="gapp_pm5" onclick="gotoapp(45890)"><span>App Link<span></div><div class="tab_data_link" onclick="document.location.href='device.php?c=XXXXX'"><div class="gstat_alarm"></div><div class="tab_box stat_alarm"><span>pH&nbsp;[pH]</span><h1>8.37</h1></div><div class="tab_box stat_ok"><span>Cl&nbsp;[mg/l]</span><h1>0.77</h1></div><div class="tab_box stat_ok"><span>T1&nbsp;[°C]</span><h1>27.2</h1></div><div class="tab_box "></div><div class="tab_info"><span>DGFB16739D22</span></br><span>PoolManager PRO</span></br><span>v240729 (9.1.1)</span></br><span><a href="device.php?c=XXXXX">Direct access</a></div></div></div>"""
+
+AUTOMATIC_SALT_HTML = """<div><div class="gapp_ase" onclick="gotoapp(34391)"><span>App Link<span></div><div class="tab_data_link" onclick="document.location.href='device.php?c=XXXXX&s=v2.10 (240812-0831)'"><div class="gstat_warning"></div><div class="tab_box stat_ok"><span>pH&nbsp;[pH]</span><h1>7.3</h1></div><div class="tab_box stat_warning"><span>Redox&nbsp;[mV]</span><h1>683</h1></div><div class="tab_box stat_ok"><span>Temp.&nbsp;[°C]</span><h1>19.5</h1></div><div class="tab_box stat_ok"><span>Salz&nbsp;[g\l]</span><h1>2.0</h1></div><div class="tab_info"><span>24ASE2-11175</span></br><span>Automatic SALT</span></br><span>v2.10 (240812-0831)</span></br><span><a href="device.php?c=XXXXX&s=v2.10 (240812-0831)">Direktzugriff</a></div></div></div>"""
 
 OFFLINE_DEVICE_HTML = """<div><div class="gapp_"></div><div class="tab_data_link" onclick="document.location.href='help.php#offline'"><div class="gstat_error"></div><div class="tab_error">No connection to the controller since 13.11.24, 07:10 UTC<br>Click here for additional information</div><div class="tab_info"><span>24PR3-1928</span></br><span></span></br><span></span></br><span><a href="help.php#offline">Direct access</a></div></div></div>"""
 
@@ -48,6 +53,36 @@ def test_parse_pool_data_automatic_cl_ph():
         "pH_alarm": True,
         "mV_alarm": True,
         "T_alarm": True
+    }
+
+def test_parse_pool_data_poolmanager_pro():
+    """Test parsing pool data from PoolManager PRO device with chlorine measurements."""
+    data = parse_pool_data(POOLMANAGER_PRO_HTML)
+    
+    assert data == {
+        "pH": 8.37,
+        "Cl": 0.77,
+        "T": 27.2,
+        "status": "online",
+        "pH_alarm": True,
+        "Cl_alarm": False,
+        "T_alarm": False
+    }
+
+def test_parse_pool_data_automatic_salt():
+    """Test parsing pool data from Automatic SALT device with salt measurements."""
+    data = parse_pool_data(AUTOMATIC_SALT_HTML)
+    
+    assert data == {
+        "pH": 7.3,
+        "mV": 683.0,
+        "T": 19.5,
+        "Salt": 2.0,
+        "status": "online",
+        "pH_alarm": False,
+        "mV_alarm": True,
+        "T_alarm": False,
+        "Salt_alarm": False
     }
 
 def test_parse_pool_data_offline_device():
@@ -318,6 +353,8 @@ def test_check_device_compatibility():
     # Should be compatible
     assert check_device_compatibility("Pool Relax Cl") is True
     assert check_device_compatibility("PoolManager Chlor (Cl)") is True
+    assert check_device_compatibility("PoolManager PRO") is True
+    assert check_device_compatibility("Automatic SALT") is True
     
     # Should not be compatible
     assert check_device_compatibility("Unknown Device") is False
@@ -346,3 +383,29 @@ def test_parse_overview_page_with_warnings(caplog):
     # The data should still be parsed successfully
     assert "11111" in data
     assert data["11111"]["device_model"] == "Unknown Device Model"
+
+def test_get_available_measurements():
+    """Test extracting available measurements from parsed data."""
+    # Test with PoolManager PRO data (has pH, Cl, T)
+    poolmanager_data = parse_pool_data(POOLMANAGER_PRO_HTML)
+    measurements = get_available_measurements(poolmanager_data)
+    assert set(measurements) == {"pH", "Cl", "T"}
+    
+    # Test with Pool Relax Cl data (has pH, mV, T)
+    relax_data = parse_pool_data(POOL_RELAX_CL_HTML)
+    measurements = get_available_measurements(relax_data)
+    assert set(measurements) == {"pH", "mV", "T"}
+    
+    # Test with Automatic SALT data (has pH, mV, T, Salt)
+    salt_data = parse_pool_data(AUTOMATIC_SALT_HTML)
+    measurements = get_available_measurements(salt_data)
+    assert set(measurements) == {"pH", "mV", "T", "Salt"}
+    
+    # Test with empty data
+    measurements = get_available_measurements({})
+    assert measurements == []
+    
+    # Test with offline device (no measurements)
+    offline_data = parse_pool_data(OFFLINE_DEVICE_HTML)
+    measurements = get_available_measurements(offline_data)
+    assert measurements == []

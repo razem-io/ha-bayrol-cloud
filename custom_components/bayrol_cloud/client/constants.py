@@ -6,6 +6,8 @@ BASE_URL = "https://www.bayrol-poolaccess.de/webview"
 COMPATIBLE_DEVICE_MODELS = [
     "Pool Relax Cl",
     "PoolManager Chlor (Cl)",
+    "PoolManager PRO",
+    "Automatic SALT",
 ]
 
 # GitHub repository info for creating issues

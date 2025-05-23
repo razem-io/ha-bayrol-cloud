@@ -282,6 +282,8 @@ def parse_overview_page(html: str, debug: bool = False) -> Dict[str, Dict[str, A
             'pH': 'pH',
             'Redox': 'mV',
             'mV': 'mV',
+            'Cl': 'Cl',
+            'Salz': 'Salt',
             'T': 'T',
             'T1': 'T'
         }
@@ -347,6 +349,8 @@ def parse_pool_data(html: str, debug: bool = False) -> Dict[str, Any]:
         'Redox': 'mV',
         'Temp.': 'T',
         'mV': 'mV',
+        'Cl': 'Cl',
+        'Salz': 'Salt',
         'T': 'T',
         'T1': 'T'
     }
@@ -394,3 +398,29 @@ def parse_pool_data(html: str, debug: bool = False) -> Dict[str, Any]:
     conditional_log(_LOGGER, logging.DEBUG, "Debug information: %s", debug.to_dict(), debug_mode=debug)
         
     return data
+
+def get_available_measurements(data: Dict[str, Any]) -> List[str]:
+    """Extract available measurement keys from parsed data.
+    
+    Returns a list of measurement keys that have actual values in the data.
+    This excludes alarm keys, status, and device info.
+    """
+    if not data or not isinstance(data, dict):
+        return []
+    
+    # Define keys that are not measurements
+    non_measurement_keys = {
+        'status', 'name', 'device_id', 'device_model', 'device_version', 'last_seen'
+    }
+    
+    measurements = []
+    for key, value in data.items():
+        # Skip non-measurement keys and alarm keys
+        if key in non_measurement_keys or key.endswith('_alarm'):
+            continue
+        
+        # Only include keys that have numeric values
+        if isinstance(value, (int, float)):
+            measurements.append(key)
+    
+    return measurements
