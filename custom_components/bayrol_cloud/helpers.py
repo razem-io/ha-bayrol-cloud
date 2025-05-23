@@ -106,9 +106,10 @@ class BayrolEntity(CoordinatorEntity):
         if self._sensor_id == "status":
             return True
             
-        # For measurement sensors (pH, mV, T), check if data exists
-        if self._sensor_id in ["pH", "mV", "T"]:
-            available = self._sensor_id in self.coordinator.data
+        # For measurement sensors, check if the sensor_id exists in coordinator data
+        # This dynamically works for any measurement type (pH, mV, T, Cl, Salt, etc.)
+        if self._sensor_id in self.coordinator.data:
+            available = True
             conditional_log(_LOGGER, logging.DEBUG, "%s: Measurement sensor available: %s", self._attr_name, available, debug_mode=False)
             return available
             
@@ -119,4 +120,3 @@ class BayrolEntity(CoordinatorEntity):
             return available
             
         conditional_log(_LOGGER, logging.DEBUG, "%s: No device status data", self._attr_name, debug_mode=False)
-        return False
