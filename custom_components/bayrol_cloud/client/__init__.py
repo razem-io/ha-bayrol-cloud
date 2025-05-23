@@ -34,6 +34,12 @@ class BayrolPoolAPI:
         """Get list of controllers from plants page."""
         return await self._client.get_controllers()
 
+#    async def get_data(self, cid: str) -> Dict[str, Any]:
+#        """Get pool data for a specific controller."""
+#        return await self._client.get_data(cid)
+    
     async def get_data(self, cid: str) -> Dict[str, Any]:
         """Get pool data for a specific controller."""
-        return await self._client.get_data(cid)
+        result = await self._client.get_data(cid)
+        _LOGGER.warning("Bayrol raw API result for controller %s: %s", cid, result)
+        return result
