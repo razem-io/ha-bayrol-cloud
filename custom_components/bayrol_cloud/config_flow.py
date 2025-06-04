@@ -370,12 +370,16 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         """Initialize options flow."""
-        self.config_entry = config_entry
+        self.entry_id = config_entry.entry_id
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Manage options."""
+        config_entry = self.hass.config_entries.async_get_entry(self.entry_id)
+        if config_entry is None:
+            return self.async_abort(reason="entry_not_found")
+            
         if user_input is not None:
             # Get the new settings password
             settings_password = user_input.get(CONF_SETTINGS_PASSWORD)
@@ -387,14 +391,14 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 try:
                     # Login first
                     if not await api.login(
-                        self.config_entry.data[CONF_USERNAME],
-                        self.config_entry.data[CONF_PASSWORD]
+                        config_entry.data[CONF_USERNAME],
+                        config_entry.data[CONF_PASSWORD]
                     ):
                         return self.async_abort(reason="auth_failed")
 
                     # Try to get access
                     access_granted = await api.get_controller_access(
-                        self.config_entry.data[CONF_CID],
+                        config_entry.data[CONF_CID],
                         settings_password
                     )
                     
@@ -427,16 +431,16 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 refresh_interval = MIN_REFRESH_INTERVAL
 
             # Update the config entry with the new settings
-            new_data = {**self.config_entry.data}
+            new_data = {**config_entry.data}
             new_data[CONF_SETTINGS_PASSWORD] = user_input.get(CONF_SETTINGS_PASSWORD)
             new_data["refresh_interval"] = refresh_interval
             self.hass.config_entries.async_update_entry(
-                self.config_entry,
+                config_entry,
                 data=new_data
             )
 
             # Reload the integration to apply the new settings
-            await self.hass.config_entries.async_reload(self.config_entry.entry_id)
+            await self.hass.config_entries.async_reload(self.entry_id)
 
             return self.async_create_entry(title="", data=user_input)
 
@@ -445,11 +449,11 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             data_schema=vol.Schema({
                 vol.Optional(
                     CONF_SETTINGS_PASSWORD,
-                    description={"suggested_value": self.config_entry.data.get(CONF_SETTINGS_PASSWORD)}
+                    description={"suggested_value": config_entry.data.get(CONF_SETTINGS_PASSWORD)}
                 ): str,
                 vol.Optional(
                     "refresh_interval",
-                    default=self.config_entry.data.get("refresh_interval", DEFAULT_REFRESH_INTERVAL)
+                    default=config_entry.data.get("refresh_interval", DEFAULT_REFRESH_INTERVAL)
                 ): vol.All(
                     vol.Coerce(int),
                     vol.Range(min=MIN_REFRESH_INTERVAL)
