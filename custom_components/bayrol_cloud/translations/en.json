@@ -62,7 +62,7 @@
   "issues": {
     "device_status_parser_failed": {
       "title": "Bayrol Cloud device data could not be read",
-      "description": "Bayrol Cloud returned a device-status page that this integration could not read. Wait until the problem is visible. Then open **Settings > Devices & services > Integrations**, find **Bayrol Cloud**, open the **three-dot menu** on its integration card, and select **Download diagnostics**. [Report this issue on GitHub](https://github.com/razem-io/ha-bayrol-cloud/issues/new?template=device-parser.yml&title=%5BBug%5D%3A+Device+status+parser+failed), add the exact controller model and a short description, and manually attach the downloaded JSON file. Sensitive values in the diagnostics are automatically redacted."
+      "description": "Bayrol Cloud returned a device-status page that this integration could not read. Open **Settings > Devices & services > Integrations**, find **Bayrol Cloud**, open the **three-dot menu** on its integration card, and select **Download diagnostics**. [Report this issue on GitHub](https://github.com/razem-io/ha-bayrol-cloud/issues/new?template=device-parser.yml&title=%5BBug%5D%3A+Device+status+parser+failed), add the exact controller model and a short description, and manually attach the downloaded JSON file. Sensitive values in the diagnostics are automatically redacted. Nevertheless, review the diagnostics file yourself before uploading it and remove any remaining personal or sensitive information."
     }
   }
 }

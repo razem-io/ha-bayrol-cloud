@@ -62,7 +62,7 @@
     "issues": {
         "device_status_parser_failed": {
             "title": "Bayrol-Cloud-Gerätedaten konnten nicht gelesen werden",
-            "description": "Bayrol Cloud hat eine Gerätestatusseite zurückgegeben, die diese Integration nicht lesen konnte. Warten Sie, bis das Problem sichtbar ist. Öffnen Sie dann **Einstellungen > Geräte & Dienste > Integrationen**, suchen Sie **Bayrol Cloud**, öffnen Sie auf der Integrationskarte das **Drei-Punkte-Menü** und wählen Sie **Diagnosedaten herunterladen**. [Melden Sie das Problem auf GitHub](https://github.com/razem-io/ha-bayrol-cloud/issues/new?template=device-parser.yml&title=%5BBug%5D%3A+Device+status+parser+failed), ergänzen Sie das genaue Controller-Modell und eine kurze Beschreibung und hängen Sie die heruntergeladene JSON-Datei dort manuell an. Vertrauliche Werte in der Diagnose werden automatisch unkenntlich gemacht."
+            "description": "Bayrol Cloud hat eine Gerätestatusseite zurückgegeben, die diese Integration nicht lesen konnte. Öffnen Sie **Einstellungen > Geräte & Dienste > Integrationen**, suchen Sie **Bayrol Cloud**, öffnen Sie auf der Integrationskarte das **Drei-Punkte-Menü** und wählen Sie **Diagnosedaten herunterladen**. [Melden Sie das Problem auf GitHub](https://github.com/razem-io/ha-bayrol-cloud/issues/new?template=device-parser.yml&title=%5BBug%5D%3A+Device+status+parser+failed), ergänzen Sie das genaue Controller-Modell und eine kurze Beschreibung und hängen Sie die heruntergeladene JSON-Datei dort manuell an. Vertrauliche Werte in der Diagnose werden automatisch unkenntlich gemacht. Prüfen Sie die Diagnosedatei vor dem Hochladen trotzdem selbst und entfernen Sie gegebenenfalls verbliebene persönliche oder vertrauliche Informationen."
         }
     }
 }
