@@ -13,3 +13,29 @@ retry_settings_access:
         entity:
           integration: bayrol_cloud
           domain: select
+
+create_test_parser_repair:
+  name: Create test parser repair
+  description: >-
+    Create a temporary parser repair for testing the diagnostics and GitHub
+    reporting flow. This does not change the parser result or submit an issue.
+  fields:
+    config_entry_id:
+      name: Config entry
+      description: Bayrol Cloud config entry for which to create the test repair.
+      required: true
+      selector:
+        config_entry:
+          integration: bayrol_cloud
+
+clear_test_parser_repair:
+  name: Clear test parser repair
+  description: Remove the temporary parser repair created for testing.
+  fields:
+    config_entry_id:
+      name: Config entry
+      description: Bayrol Cloud config entry whose test repair should be removed.
+      required: true
+      selector:
+        config_entry:
+          integration: bayrol_cloud

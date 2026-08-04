@@ -103,6 +103,21 @@ The device debug switch enables additional structural logging. It is useful for
 local troubleshooting, but it is not required to capture the device response in
 the diagnostics file.
 
+### Testing the repair flow on feature builds
+
+Feature builds provide two temporary Home Assistant actions for testing the
+repair and GitHub reporting flow without causing a real parser failure:
+
+1. Go to Developer Tools -> Actions.
+2. Run `bayrol_cloud.create_test_parser_repair` and select the Bayrol Cloud
+   config entry.
+3. Open Settings -> System -> Repairs and follow the GitHub reporting link.
+4. When finished, run `bayrol_cloud.clear_test_parser_repair` for the same
+   config entry.
+
+The test action only creates the Home Assistant repair. It does not submit a
+GitHub issue or change the latest diagnostics parser result.
+
 ### Using Debug Mode
 
 1. Find your device's debug switch in Home Assistant:

@@ -8,6 +8,9 @@ ISSUE_REPORT_URL = (
     "?template=device-parser.yml"
     "&title=%5BBug%5D%3A+Device+status+parser+failed"
 )
+SERVICE_CREATE_TEST_PARSER_REPAIR = "create_test_parser_repair"
+SERVICE_CLEAR_TEST_PARSER_REPAIR = "clear_test_parser_repair"
+ATTR_CONFIG_ENTRY_ID = "config_entry_id"
 
 # Refresh interval settings
 MIN_REFRESH_INTERVAL = 30  # minimum refresh interval in seconds

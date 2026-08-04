@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from functools import partial
 import logging
 
 import async_timeout
@@ -13,7 +14,8 @@ from homeassistant.const import (
     CONF_PASSWORD,
     Platform,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import homeassistant.helpers.config_validation as cv
@@ -24,7 +26,13 @@ from homeassistant.helpers.update_coordinator import (
 
 from .client.bayrol_api import BayrolPoolAPI
 from .client.device_parser import parse_device_status
-from .const import DEFAULT_REFRESH_INTERVAL, ISSUE_REPORT_URL
+from .const import (
+    ATTR_CONFIG_ENTRY_ID,
+    DEFAULT_REFRESH_INTERVAL,
+    ISSUE_REPORT_URL,
+    SERVICE_CLEAR_TEST_PARSER_REPAIR,
+    SERVICE_CREATE_TEST_PARSER_REPAIR,
+)
 from .helpers import conditional_log
 
 _LOGGER = logging.getLogger(__name__)
@@ -47,9 +55,66 @@ CONFIG_SCHEMA = vol.Schema(
     extra=vol.ALLOW_EXTRA,
 )
 
+TEST_PARSER_REPAIR_SCHEMA = vol.Schema(
+    {vol.Required(ATTR_CONFIG_ENTRY_ID): cv.string}
+)
+
+
+def _set_parser_issue(
+    hass: HomeAssistant,
+    issue_id: str,
+    *,
+    create: bool,
+) -> None:
+    """Create or remove a parser repair using the production issue content."""
+    if not create:
+        ir.async_delete_issue(hass, DOMAIN, issue_id)
+        return
+
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        issue_id,
+        is_fixable=False,
+        is_persistent=True,
+        learn_more_url=ISSUE_REPORT_URL,
+        severity=ir.IssueSeverity.ERROR,
+        translation_key="device_status_parser_failed",
+    )
+
+
+async def _async_handle_test_parser_repair(
+    hass: HomeAssistant,
+    call: ServiceCall,
+) -> None:
+    """Create or clear a test repair without changing the parser state."""
+    entry_id = call.data[ATTR_CONFIG_ENTRY_ID]
+    if entry_id not in hass.data[DOMAIN]:
+        raise HomeAssistantError(
+            f"Bayrol Cloud config entry {entry_id} is not loaded"
+        )
+
+    issue_id = f"test_device_status_parser_{entry_id}"
+    _set_parser_issue(
+        hass,
+        issue_id,
+        create=call.service == SERVICE_CREATE_TEST_PARSER_REPAIR,
+    )
+
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Set up the Bayrol Pool component."""
     hass.data.setdefault(DOMAIN, {})
+    for service in (
+        SERVICE_CREATE_TEST_PARSER_REPAIR,
+        SERVICE_CLEAR_TEST_PARSER_REPAIR,
+    ):
+        if not hass.services.has_service(DOMAIN, service):
+            hass.services.async_register(
+                DOMAIN,
+                service,
+                partial(_async_handle_test_parser_repair, hass),
+                schema=TEST_PARSER_REPAIR_SCHEMA,
+            )
     return True
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -64,20 +129,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     def record_device_status_parse_result(success: bool) -> None:
         """Store the result and maintain an actionable Home Assistant repair."""
         api.set_device_status_parse_result(success)
-        if success:
-            ir.async_delete_issue(hass, DOMAIN, parser_issue_id)
-            return
-
-        ir.async_create_issue(
-            hass,
-            DOMAIN,
-            parser_issue_id,
-            is_fixable=False,
-            is_persistent=True,
-            learn_more_url=ISSUE_REPORT_URL,
-            severity=ir.IssueSeverity.ERROR,
-            translation_key="device_status_parser_failed",
-        )
+        _set_parser_issue(hass, parser_issue_id, create=not success)
 
     # Initial login to establish session
     try:
