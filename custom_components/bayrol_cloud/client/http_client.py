@@ -24,6 +24,72 @@ from ..helpers import conditional_log
 
 _LOGGER = logging.getLogger(__name__)
 
+
+async def _read_html_response(response: aiohttp.ClientResponse, debug: bool = False) -> str:
+    """Read and decode an HTML response using declared charset with fallbacks."""
+    body = await response.read()
+    encodings: list[str] = []
+
+    if response.charset:
+        encodings.append(response.charset)
+
+    try:
+        detected_encoding = response.get_encoding()
+    except Exception as err:
+        conditional_log(
+            _LOGGER,
+            logging.DEBUG,
+            "Could not determine response encoding from headers: %s",
+            err,
+            debug_mode=debug,
+        )
+    else:
+        encodings.append(detected_encoding)
+
+    encodings.extend(["utf-8", "windows-1252", "iso-8859-1"])
+
+    tried_encodings: set[str] = set()
+    last_error: Exception | None = None
+
+    for encoding in encodings:
+        normalized_encoding = encoding.lower()
+        if normalized_encoding in tried_encodings:
+            continue
+        tried_encodings.add(normalized_encoding)
+
+        try:
+            text = body.decode(encoding)
+        except (LookupError, UnicodeDecodeError) as err:
+            last_error = err
+            conditional_log(
+                _LOGGER,
+                logging.DEBUG,
+                "Failed to decode HTML response as %s: %s",
+                encoding,
+                err,
+                debug_mode=debug,
+            )
+            continue
+
+        if len(tried_encodings) > 1:
+            conditional_log(
+                _LOGGER,
+                logging.DEBUG,
+                "Decoded HTML response using fallback encoding %s",
+                encoding,
+                debug_mode=debug,
+            )
+        return text
+
+    raise UnicodeDecodeError(
+        "html-response",
+        body,
+        0,
+        len(body),
+        f"Unable to decode HTML response: {last_error}",
+    )
+
+
 class BayrolHttpClient:
     """HTTP client for Bayrol Pool API."""
 
@@ -105,7 +171,7 @@ class BayrolHttpClient:
             conditional_log(_LOGGER, logging.DEBUG, "Making initial GET request to %s", init_url, debug_mode=self._debug_mode)
             async with self._session.get(init_url, headers=init_headers, allow_redirects=True) as response:
                 conditional_log(_LOGGER, logging.DEBUG, "Initial response status: %s", response.status, debug_mode=self._debug_mode)
-                html = await response.text()
+                html = await _read_html_response(response, debug=self._debug_mode)
                 
                 phpsessid = self._extract_phpsessid(response)
                 if not phpsessid:
@@ -131,7 +197,7 @@ class BayrolHttpClient:
 
             async with self._session.post(login_url, headers=login_headers, data=form_data, allow_redirects=True) as response:
                 conditional_log(_LOGGER, logging.DEBUG, "Login response status: %s", response.status, debug_mode=self._debug_mode)
-                content = await response.text()
+                content = await _read_html_response(response, debug=self._debug_mode)
                 
                 if check_login_error(content):
                     return False
@@ -156,7 +222,7 @@ class BayrolHttpClient:
             conditional_log(_LOGGER, logging.DEBUG, "Getting controllers from %s", url, debug_mode=self._debug_mode)
             async with self._session.get(url, headers=headers) as response:
                 conditional_log(_LOGGER, logging.DEBUG, "Get controllers response status: %s", response.status, debug_mode=self._debug_mode)
-                html = await response.text()
+                html = await _read_html_response(response, debug=self._debug_mode)
                 if self._debug_mode:
                     self._last_raw_html = html
                 return parse_controllers(html)
@@ -187,7 +253,7 @@ class BayrolHttpClient:
                     
                     # Try to get some response content even on error
                     try:
-                        error_content = await response.text()
+                        error_content = await _read_html_response(response, debug=self._debug_mode)
                         error_preview = error_content[:200] + "..." if len(error_content) > 200 else error_content
                         conditional_log(_LOGGER, logging.DEBUG, "Error response content preview: %s", error_preview, debug_mode=self._debug_mode)
                     except Exception as read_err:
@@ -195,7 +261,7 @@ class BayrolHttpClient:
                     
                     return ""
                 
-                html = await response.text()
+                html = await _read_html_response(response, debug=self._debug_mode)
                 
                 # Add detailed logging
                 content_length = len(html)
@@ -254,7 +320,7 @@ class BayrolHttpClient:
                     _LOGGER.error("Overview data fetch failed with status: %s", response.status)
                     return {}
                 
-                html = await response.text()
+                html = await _read_html_response(response, debug=self._debug_mode)
                 if self._debug_mode:
                     self._last_raw_html = html
                     
@@ -290,7 +356,7 @@ class BayrolHttpClient:
                     overview_data = await self.get_overview_data()
                     return overview_data.get(cid, {})
                 
-                html = await response.text()
+                html = await _read_html_response(response, debug=self._debug_mode)
                 if self._debug_mode:
                     self._last_raw_html = html
                 
