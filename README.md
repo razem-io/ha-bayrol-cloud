@@ -85,12 +85,23 @@ Have a different Bayrol device? Please [open an issue](https://github.com/razem-
 
 The integration will automatically discover and add all pool controllers configured in your Bayrol Cloud account.
 
-## Debug Mode
+## Diagnostics and Debug Mode
 
-Each device comes with a debug switch that can be used to capture raw HTML responses from the Bayrol Cloud API. This is particularly useful when:
-- Troubleshooting issues
-- Adding support for new device types
-- Understanding the data structure
+The integration keeps the most recent device-status response in memory so it can
+be included in a Home Assistant diagnostics download. Credentials, controller
+IDs, session IDs, email addresses, and device names are automatically redacted.
+The response is not written to the Home Assistant log or entity state.
+
+To download diagnostics:
+
+1. Wait until the problem occurs.
+2. Go to Settings -> Devices & Services -> Bayrol Cloud.
+3. Open the integration menu and select "Download diagnostics".
+4. Attach the downloaded JSON file to the related GitHub issue.
+
+The device debug switch enables additional structural logging. It is useful for
+local troubleshooting, but it is not required to capture the device response in
+the diagnostics file.
 
 ### Using Debug Mode
 
@@ -102,27 +113,10 @@ Each device comes with a debug switch that can be used to capture raw HTML respo
 
 2. Enable debug mode:
    - Toggle the debug switch to ON
-   - The integration will start capturing raw HTML responses
+   - The integration will log additional response and parser metadata
 
-3. Access the debug information:
-   - Go to Developer Tools -> States
-   - Search for your debug switch entity (e.g., `switch.bayrol_cloud_CID_debug`)
-   - Look in the attributes section
-   - You'll find the raw HTML response under `debug_raw_html`
-
-Example of accessing debug data:
-```yaml
-switch.bayrol_cloud_12345_debug:
-  state: 'on'
-  attributes:
-    debug_raw_html: '<html>... raw HTML response from Bayrol Cloud API ...</html>'
-    friendly_name: 'Pool Controller Debug Mode'
-    icon: 'mdi:bug'
-```
-
-4. When finished:
+3. When finished:
    - Toggle the debug switch to OFF
-   - Debug data will be cleared
 
 ## Development
 

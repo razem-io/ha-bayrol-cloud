@@ -18,10 +18,6 @@ def parse_device_status(html: str, debug: bool = False) -> Dict[str, Any]:
         html_length = len(html)
         conditional_log(_LOGGER, logging.DEBUG, "Starting to parse device status (HTML length: %d bytes)", html_length, debug_mode=debug)
         
-        # Create a snippet for debugging that won't overwhelm logs
-        html_snippet = html[:200] + "..." if len(html) > 200 else html
-        conditional_log(_LOGGER, logging.DEBUG, "HTML snippet: %s", html_snippet, debug_mode=debug)
-        
         soup = BeautifulSoup(html, 'html.parser')
         data = {}
 
@@ -82,8 +78,12 @@ def parse_device_status(html: str, debug: bool = False) -> Dict[str, Any]:
                     ('tab_box', len(soup.find_all('div', class_='tab_box'))),
                 ]
                 conditional_log(_LOGGER, logging.DEBUG, "Found other elements: %s", other_classes, debug_mode=debug)
-                if debug:
-                    conditional_log(_LOGGER, logging.DEBUG, "Raw HTML when no device divs found:\n%s", html, debug_mode=debug)
+                conditional_log(
+                    _LOGGER,
+                    logging.DEBUG,
+                    "Device response captured for Home Assistant diagnostics",
+                    debug_mode=debug,
+                )
                 return {}
                 
             conditional_log(_LOGGER, logging.DEBUG, "Found %d device divs", len(device_divs), debug_mode=debug)
@@ -91,16 +91,24 @@ def parse_device_status(html: str, debug: bool = False) -> Dict[str, Any]:
         
         if not data:
             _LOGGER.warning("Device status parsing resulted in empty data")
-            if debug:
-                conditional_log(_LOGGER, logging.DEBUG, "Raw HTML that failed parsing:\n%s", html, debug_mode=debug)
+            conditional_log(
+                _LOGGER,
+                logging.DEBUG,
+                "Failed response captured for Home Assistant diagnostics",
+                debug_mode=debug,
+            )
             return {}
             
         conditional_log(_LOGGER, logging.DEBUG, "Parsed device status: %s", data, debug_mode=debug)
         return data
     except Exception as e:
         _LOGGER.warning("Error parsing device status HTML: %s", str(e))
-        if debug:
-            conditional_log(_LOGGER, logging.DEBUG, "Raw HTML that caused exception:\n%s", html, debug_mode=debug)
+        conditional_log(
+            _LOGGER,
+            logging.DEBUG,
+            "Exception response captured for Home Assistant diagnostics",
+            debug_mode=debug,
+        )
         return {}
 
 def process_controller_items(i_items, data, prefix='', debug=False):

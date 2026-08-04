@@ -34,7 +34,7 @@ class BayrolDebugSwitch(CoordinatorEntity, SwitchEntity):
         self._cid = entry.data[CONF_CID]
         self._api = api
         device_name = entry.data.get("device_name", "Pool Controller")
-        self._version = "0.2.3"  # Version from manifest.json
+        self._version = "0.2.4"  # Version from manifest.json
         self._last_updated = None
         
         # Set both entity_id and unique_id with the same format as sensors
@@ -66,11 +66,9 @@ class BayrolDebugSwitch(CoordinatorEntity, SwitchEntity):
         if self._last_updated:
             attributes["last_updated"] = self._last_updated
             
-        if self.is_on and self.coordinator.data and "debug_raw_html" in self.coordinator.data:
-            attributes["debug_raw_html"] = self.coordinator.data["debug_raw_html"]
-            self._last_updated = datetime.now().isoformat()
-            attributes["last_updated"] = self._last_updated
-            
+        if self.is_on:
+            attributes["diagnostics"] = "Use Download diagnostics from the integration menu"
+
         return attributes
 
     async def async_turn_on(self, **kwargs) -> None:

@@ -1,7 +1,8 @@
 """HTTP client for Bayrol Pool API."""
+from datetime import datetime, timezone
 import logging
 import re
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
 import aiohttp
 
@@ -99,6 +100,7 @@ class BayrolHttpClient:
         self._phpsessid: Optional[str] = None
         self._debug_mode = False
         self._last_raw_html = None
+        self._last_device_status_response: Optional[Dict[str, Any]] = None
         conditional_log(_LOGGER, logging.DEBUG, "BayrolHttpClient initialized with session: %s", id(session), debug_mode=self._debug_mode)
 
     @property
@@ -118,6 +120,35 @@ class BayrolHttpClient:
         """Get last raw HTML if debug mode is enabled."""
         return self._last_raw_html if self._debug_mode else None
 
+    @property
+    def last_device_status_response(self) -> Optional[Dict[str, Any]]:
+        """Return the most recent device status response for diagnostics."""
+        if self._last_device_status_response is None:
+            return None
+        return self._last_device_status_response.copy()
+
+    def set_device_status_parse_result(self, success: bool) -> None:
+        """Record whether the most recent device status response parsed."""
+        if self._last_device_status_response is not None:
+            self._last_device_status_response["parse_success"] = success
+
+    def _capture_device_status_response(
+        self,
+        *,
+        status: int,
+        html: str,
+        content_type: Optional[str],
+    ) -> None:
+        """Keep the latest device response in memory for diagnostics."""
+        self._last_device_status_response = {
+            "captured_at": datetime.now(timezone.utc).isoformat(),
+            "status": status,
+            "content_type": content_type,
+            "content_length": len(html),
+            "parse_success": None,
+            "html": html,
+        }
+
     def _get_headers(self, additional_headers: Dict[str, str] | None = None) -> Dict[str, str]:
         """Get headers with optional additions and session cookie if available."""
         headers = BASE_HEADERS.copy()
@@ -128,7 +159,13 @@ class BayrolHttpClient:
         if additional_headers:
             headers.update(additional_headers)
             
-        conditional_log(_LOGGER, logging.DEBUG, "Generated headers: %s", headers, debug_mode=self._debug_mode)
+        conditional_log(
+            _LOGGER,
+            logging.DEBUG,
+            "Generated request headers: %s",
+            sorted(headers),
+            debug_mode=self._debug_mode,
+        )
         return headers
 
     def _extract_phpsessid(self, response: aiohttp.ClientResponse) -> Optional[str]:
@@ -142,7 +179,6 @@ class BayrolHttpClient:
         # If no PHPSESSID in cookies, try to get it from Set-Cookie header
         if 'Set-Cookie' in response.headers:
             cookie_header = response.headers['Set-Cookie']
-            conditional_log(_LOGGER, logging.DEBUG, "Set-Cookie header: %s", cookie_header, debug_mode=self._debug_mode)
             match = re.search(r'PHPSESSID=([^;]+)', cookie_header)
             if match:
                 return match.group(1)
@@ -179,7 +215,7 @@ class BayrolHttpClient:
                     return False
 
                 self._phpsessid = phpsessid
-                conditional_log(_LOGGER, logging.DEBUG, "Got session ID: %s", self._phpsessid, debug_mode=self._debug_mode)
+                conditional_log(_LOGGER, logging.DEBUG, "Session ID received", debug_mode=self._debug_mode)
 
                 # Extract form data and add credentials
                 form_data = parse_login_form(html)
@@ -248,20 +284,25 @@ class BayrolHttpClient:
                 
                 if response.status != 200:
                     _LOGGER.error("Device status fetch failed with status: %s", response.status)
-                    response_headers = dict(response.headers)
-                    conditional_log(_LOGGER, logging.DEBUG, "Response headers: %s", response_headers, debug_mode=self._debug_mode)
-                    
-                    # Try to get some response content even on error
+
                     try:
                         error_content = await _read_html_response(response, debug=self._debug_mode)
-                        error_preview = error_content[:200] + "..." if len(error_content) > 200 else error_content
-                        conditional_log(_LOGGER, logging.DEBUG, "Error response content preview: %s", error_preview, debug_mode=self._debug_mode)
+                        self._capture_device_status_response(
+                            status=response.status,
+                            html=error_content,
+                            content_type=response.headers.get("Content-Type"),
+                        )
                     except Exception as read_err:
                         conditional_log(_LOGGER, logging.DEBUG, "Could not read error response content: %s", read_err, debug_mode=self._debug_mode)
                     
                     return ""
                 
                 html = await _read_html_response(response, debug=self._debug_mode)
+                self._capture_device_status_response(
+                    status=response.status,
+                    html=html,
+                    content_type=response.headers.get("Content-Type"),
+                )
                 
                 # Add detailed logging
                 content_length = len(html)
@@ -271,13 +312,7 @@ class BayrolHttpClient:
                     _LOGGER.warning("Empty device status response received")
                     return ""
                     
-                if content_length < 200:
-                    # If very small, log the entire content
-                    conditional_log(_LOGGER, logging.DEBUG, "Small device status response: %s", html, debug_mode=self._debug_mode)
-                else:
-                    # Log a preview of the content
-                    conditional_log(_LOGGER, logging.DEBUG, "Device status response preview: %s...", html[:200], debug_mode=self._debug_mode)
-                    
+                if content_length >= 200:
                     # Check for key HTML elements to help diagnose problems
                     has_html_tag = "<html" in html.lower()
                     has_body_tag = "<body" in html.lower()

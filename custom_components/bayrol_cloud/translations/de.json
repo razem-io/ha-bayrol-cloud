@@ -58,5 +58,11 @@
                 "description": "Aktualisieren Sie die Einstellungen für diesen Controller. Das Einstellungspasswort wird nur benötigt, wenn Sie Controller-Einstellungen ändern möchten."
             }
         }
+    },
+    "issues": {
+        "device_status_parser_failed": {
+            "title": "Bayrol-Cloud-Gerätedaten konnten nicht gelesen werden",
+            "description": "Bayrol Cloud hat eine Gerätestatusseite zurückgegeben, die diese Integration nicht lesen konnte. Warten Sie, bis das Problem sichtbar ist, und laden Sie dann die Diagnose unter **Einstellungen > Geräte & Dienste > Bayrol Cloud** herunter. [Melden Sie das Problem auf GitHub](https://github.com/razem-io/ha-bayrol-cloud/issues/new?template=device-parser.yml&title=%5BBug%5D%3A+Device+status+parser+failed), ergänzen Sie das genaue Controller-Modell und eine kurze Beschreibung und hängen Sie die heruntergeladene JSON-Datei an. Vertrauliche Werte in der Diagnose werden automatisch unkenntlich gemacht."
+        }
     }
 }

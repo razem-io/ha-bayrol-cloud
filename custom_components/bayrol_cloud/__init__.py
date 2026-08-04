@@ -1,12 +1,11 @@
 """The Bayrol Pool Controller integration."""
 from __future__ import annotations
 
+from datetime import timedelta
 import logging
-import aiohttp
+
 import async_timeout
 import voluptuous as vol
-from datetime import timedelta
-from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
@@ -15,17 +14,17 @@ from homeassistant.const import (
     Platform,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.update_coordinator import (
-    CoordinatorEntity,
     DataUpdateCoordinator,
     UpdateFailed,
 )
 
 from .client.bayrol_api import BayrolPoolAPI
 from .client.device_parser import parse_device_status
-from .const import DEFAULT_REFRESH_INTERVAL
+from .const import DEFAULT_REFRESH_INTERVAL, ISSUE_REPORT_URL
 from .helpers import conditional_log
 
 _LOGGER = logging.getLogger(__name__)
@@ -60,6 +59,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Create API instance
     session = async_get_clientsession(hass)
     api = BayrolPoolAPI(session)
+    parser_issue_id = f"device_status_parser_{entry.entry_id}"
+
+    def record_device_status_parse_result(success: bool) -> None:
+        """Store the result and maintain an actionable Home Assistant repair."""
+        api.set_device_status_parse_result(success)
+        if success:
+            ir.async_delete_issue(hass, DOMAIN, parser_issue_id)
+            return
+
+        ir.async_create_issue(
+            hass,
+            DOMAIN,
+            parser_issue_id,
+            is_fixable=False,
+            is_persistent=True,
+            learn_more_url=ISSUE_REPORT_URL,
+            severity=ir.IssueSeverity.ERROR,
+            translation_key="device_status_parser_failed",
+        )
 
     # Initial login to establish session
     try:
@@ -115,14 +133,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                             try:
                                 device_status = await api.get_device_status(entry.data[CONF_CID], raw=True)
                                 if device_status:
-                                        parsed_status = parse_device_status(device_status, debug=api.debug_mode)
-                                        if parsed_status:
-                                            data["device_status"] = parsed_status
-                                            conditional_log(_LOGGER, logging.DEBUG, "Device status parsed successfully: %s", parsed_status, debug_mode=api.debug_mode)
-                                        else:
-                                            html_length = len(device_status) if device_status else 0
-                                            html_type = type(device_status).__name__
-                                            _LOGGER.warning("Failed to parse device status data (length: %d bytes, type: %s)", html_length, html_type)
+                                    parsed_status = parse_device_status(device_status, debug=api.debug_mode)
+                                    record_device_status_parse_result(bool(parsed_status))
+                                    if parsed_status:
+                                        data["device_status"] = parsed_status
+                                        conditional_log(_LOGGER, logging.DEBUG, "Device status parsed successfully: %s", parsed_status, debug_mode=api.debug_mode)
+                                    else:
+                                        html_length = len(device_status) if device_status else 0
+                                        html_type = type(device_status).__name__
+                                        _LOGGER.warning("Failed to parse device status data (length: %d bytes, type: %s)", html_length, html_type)
+                                elif api.last_device_status_response is not None:
+                                    record_device_status_parse_result(False)
                             except Exception as err:
                                 _LOGGER.warning("Error getting device status: %s", err)
                             
@@ -140,6 +161,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                                     device_status = await api.get_device_status(entry.data[CONF_CID], raw=True)
                                     if device_status:
                                         parsed_status = parse_device_status(device_status, debug=api.debug_mode)
+                                        record_device_status_parse_result(bool(parsed_status))
                                         if parsed_status:
                                             # Compare with previous device status to see what changed
                                             if coordinator.data and "device_status" in coordinator.data:
@@ -162,6 +184,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                                             html_length = len(device_status) if device_status else 0
                                             html_type = type(device_status).__name__
                                             _LOGGER.warning("Failed to parse device status data (length: %d bytes, type: %s)", html_length, html_type)
+                                    elif api.last_device_status_response is not None:
+                                        record_device_status_parse_result(False)
                                 except Exception as err:
                                     _LOGGER.warning("Error getting device status: %s", err)
                                 

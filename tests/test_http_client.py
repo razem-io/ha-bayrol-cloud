@@ -2,7 +2,10 @@
 
 import pytest
 
-from custom_components.bayrol_cloud.client.http_client import _read_html_response
+from custom_components.bayrol_cloud.client.http_client import (
+    BayrolHttpClient,
+    _read_html_response,
+)
 
 
 class FakeResponse:
@@ -68,3 +71,22 @@ async def test_read_html_response_falls_back_when_charset_missing() -> None:
     )
 
     assert await _read_html_response(response) == "<html>gr\u00f6\u00dfer</html>"
+
+
+def test_device_status_diagnostics_capture_is_independent_of_debug_mode() -> None:
+    """Keep the latest response available for diagnostics without debug logging."""
+    client = BayrolHttpClient(session=None)
+
+    client._capture_device_status_response(
+        status=200,
+        html='<div class="i_x16">Status</div>',
+        content_type="text/html; charset=UTF-8",
+    )
+    client.set_device_status_parse_result(False)
+
+    result = client.last_device_status_response
+    assert result is not None
+    assert result["status"] == 200
+    assert result["content_length"] == 31
+    assert result["parse_success"] is False
+    assert result["html"] == '<div class="i_x16">Status</div>'

@@ -33,6 +33,15 @@ class BayrolPoolAPI:
             raw_html = re.sub(r'(?:device\.php\?c=|c=)(\d+)', r'device.php?c=XXXXX', raw_html)
         return raw_html
 
+    @property
+    def last_device_status_response(self) -> Dict[str, Any] | None:
+        """Return the latest device response captured for diagnostics."""
+        return self._client.last_device_status_response
+
+    def set_device_status_parse_result(self, success: bool) -> None:
+        """Record whether the latest device response parsed successfully."""
+        self._client.set_device_status_parse_result(success)
+
     async def login(self, username: str, password: str) -> bool:
         """Login to Bayrol Pool Access."""
         return await self._client.login(username, password)
@@ -58,10 +67,7 @@ class BayrolPoolAPI:
 
     async def get_data(self, cid: str) -> Dict[str, Any]:
         """Get pool data for a specific controller."""
-        data = await self._client.get_data(cid)
-        if self.debug_mode:
-            data["debug_raw_html"] = self.last_raw_html
-        return data
+        return await self._client.get_data(cid)
 
     async def set_controller_password(self, cid: str, password: str) -> bool:
         """Set the controller password.

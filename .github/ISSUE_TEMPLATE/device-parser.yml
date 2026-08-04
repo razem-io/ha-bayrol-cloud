@@ -1,0 +1,44 @@
+name: Bayrol device parser problem
+description: Report device entities becoming unavailable because a Bayrol page could not be read
+title: "[Bug]: Device status parser failed"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping us support your Bayrol controller. Please do not paste passwords, cookies, or session IDs. Diagnostics downloaded from integration version 0.2.4 or newer are automatically redacted.
+
+  - type: input
+    id: device_model
+    attributes:
+      label: Exact Bayrol controller model
+      description: For example, Automatic SALT or PoolManager.
+      placeholder: Bayrol ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Briefly describe when the entities became unavailable and whether it is reproducible.
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Home Assistant diagnostics
+      description: Drag the JSON file downloaded from Settings > Devices & services > Bayrol Cloud into this field.
+      placeholder: Drag and drop the diagnostics JSON file here.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I am using Bayrol Cloud integration version 0.2.4 or newer.
+          required: true
+        - label: I reviewed the diagnostics and did not add unredacted credentials or session data.
+          required: true

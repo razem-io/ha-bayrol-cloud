@@ -1,0 +1,68 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "Device is already configured",
+      "auth_failed": "Authentication failed"
+    },
+    "error": {
+      "cannot_connect": "Failed to connect",
+      "invalid_auth": "Invalid authentication",
+      "invalid_settings_auth": "Invalid settings password",
+      "invalid_controller_selection": "Invalid controller selection",
+      "unknown": "Unexpected error"
+    },
+    "step": {
+      "user": {
+        "data": {
+          "username": "Username",
+          "password": "Password",
+          "refresh_interval": "Data refresh interval (seconds)"
+        },
+        "title": "Connect to Bayrol Pool Access",
+        "description": "Please enter your Bayrol Pool Access credentials."
+      },
+      "select_controller": {
+        "data": {
+          "controller_action": "Select controller"
+        },
+        "title": "Select Controller",
+        "description": "The following controllers were found. Select one to add, or choose to add a controller by ID manually."
+      },
+      "controller": {
+        "data": {
+          "cid": "Controller ID"
+        },
+        "title": "Add Controller by ID",
+        "description": "Enter the controller ID. You can find this number in the URL when viewing your controller in the Bayrol Pool Access web interface."
+      },
+      "controller_settings": {
+        "data": {
+          "settings_password": "Settings Password (optional)"
+        },
+        "title": "Controller Settings",
+        "description": "Configure {controller_name} (ID: {controller_id}). Enter the settings password if you want to modify controller settings. Each controller can have its own unique password."
+      }
+    }
+  },
+  "options": {
+    "error": {
+      "invalid_settings_auth": "Invalid settings password"
+    },
+    "step": {
+      "init": {
+        "data": {
+          "settings_password": "Settings Password (optional)",
+          "refresh_interval": "Data refresh interval (seconds)"
+        },
+        "title": "Bayrol Pool Controller Options",
+        "description": "Update settings for this controller. The settings password is required only if you want to modify controller settings."
+      }
+    }
+  },
+  "issues": {
+    "device_status_parser_failed": {
+      "title": "Bayrol Cloud device data could not be read",
+      "description": "Bayrol Cloud returned a device-status page that this integration could not read. Wait until the problem is visible, then download the diagnostics from **Settings > Devices & services > Bayrol Cloud**. [Report this issue on GitHub](https://github.com/razem-io/ha-bayrol-cloud/issues/new?template=device-parser.yml&title=%5BBug%5D%3A+Device+status+parser+failed), add the exact controller model and a short description, and attach the downloaded JSON file. Sensitive values in the diagnostics are automatically redacted."
+    }
+  }
+}
